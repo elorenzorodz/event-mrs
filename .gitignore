@@ -16,3 +16,6 @@ go.sum
 
 # Private and private keys
 *.pem
+
+# SQLC yaml file
+sqlc-dev.yaml

@@ -21,11 +21,10 @@ func main() {
 
 	router := gin.Default()
 	v1 := router.Group("/" + apiVersion)
-	{
-		v1.GET("/ping", func(ginContext *gin.Context) {
-			ginContext.JSON(http.StatusOK, gin.H { "message": "pong" })
-		})
-	}
+
+	v1.GET("/ping", func(ginContext *gin.Context) {
+		ginContext.JSON(http.StatusOK, gin.H { "message": "pong" })
+	})
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
