@@ -37,6 +37,7 @@ func main() {
 	}
 
 	v1.POST("/account/register", userAPIConfig.RegisterUser)
+	v1.POST("/account/login", userAPIConfig.LoginUser)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
