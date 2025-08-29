@@ -1,4 +1,4 @@
 -- name: CreateUser :one
-INSERT INTO users (id, first_name, last_name, email, password)
+INSERT INTO users (id, firstname, lastname, email, password)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, first_name, last_name, email, password, created_at, updated_at;
+RETURNING id, firstname, lastname, email, password, created_at, updated_at;
