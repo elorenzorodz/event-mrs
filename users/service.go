@@ -71,5 +71,5 @@ func (userAPIConfig *UserAPIConfig) RegisterUser(ginContext *gin.Context) {
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": newUser})
+	ginContext.JSON(http.StatusOK, gin.H{"user": newUser})
 }
