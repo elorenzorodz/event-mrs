@@ -71,3 +71,36 @@ func (eventAPIConfig *EventAPIConfig) GetUserEvents(ginContext *gin.Context) {
 
 	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventsToEventsJSON(getUserEvents)})
 }
+
+func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) {
+	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	getUserEventByIdParams := database.GetUserEventByIdParams {
+		ID: eventId,
+		UserID: userId,
+	}
+
+	getUserEvent, getUserEventByIdError := eventAPIConfig.DB.GetUserEventById(ginContext, getUserEventByIdParams)
+
+	if getUserEventByIdError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving user event, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventToEventJSON(getUserEvent)})
+}

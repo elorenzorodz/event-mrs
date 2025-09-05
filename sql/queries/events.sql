@@ -7,3 +7,8 @@ RETURNING id, title, description, organizer, created_at, updated_at, user_id;
 SELECT * 
 FROM events
 WHERE user_id = $1;
+
+-- name: GetUserEventById :one
+SELECT *
+FROM events
+WHERE id = $1 AND user_id = $2;

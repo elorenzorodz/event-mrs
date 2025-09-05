@@ -52,6 +52,7 @@ func main() {
 	v1WithAuthorization.Use(middleware.AuthorizationMiddleware(&userAPIConfig))
 
 	v1WithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)
+	v1WithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
 	v1WithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
