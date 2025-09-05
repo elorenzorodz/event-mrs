@@ -11,6 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type Event struct {
+	ID          uuid.UUID
+	Title       string
+	Description string
+	Organizer   sql.NullString
+	CreatedAt   time.Time
+	UpdatedAt   sql.NullTime
+	UserID      uuid.UUID
+}
+
 type User struct {
 	ID        uuid.UUID
 	Firstname string
