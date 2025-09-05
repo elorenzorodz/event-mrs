@@ -49,7 +49,7 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{"event": newEvent})
+	ginContext.JSON(http.StatusCreated, gin.H{"event": DatabaseEventToEventJSON(newEvent)})
 }
 
 func (eventAPIConfig *EventAPIConfig) GetUserEvents(ginContext *gin.Context) {
@@ -69,5 +69,5 @@ func (eventAPIConfig *EventAPIConfig) GetUserEvents(ginContext *gin.Context) {
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"events": getUserEvents})
+	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventsToEventsJSON(getUserEvents)})
 }

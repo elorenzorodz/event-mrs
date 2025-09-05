@@ -9,3 +9,11 @@ func StringToNullString(text string) sql.NullString {
 
 	return sql.NullString{String: text, Valid: true}
 }
+
+func NullTimeToString(nullString sql.NullTime) string {
+	if !nullString.Valid {
+		return ""
+	}
+
+	return nullString.Time.String()
+}
