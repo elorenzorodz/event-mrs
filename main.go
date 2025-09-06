@@ -55,6 +55,7 @@ func main() {
 	routerWithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
 	routerWithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
 	routerWithAuthorization.PUT("/events/:eventId", eventAPIConfig.UpdateEvent)
+	routerWithAuthorization.DELETE("/events/:eventId", eventAPIConfig.DeleteEvent)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 

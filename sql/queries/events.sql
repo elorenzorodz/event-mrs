@@ -18,3 +18,6 @@ UPDATE events
 SET title = $1, description = $2, organizer = $3, updated_at = NOW()
 WHERE id = $4 AND user_id= $5
 RETURNING id, title, description, organizer, created_at, updated_at, user_id;
+
+-- name: DeleteEvent :exec
+DELETE FROM events WHERE id = $1 AND user_id = $2;

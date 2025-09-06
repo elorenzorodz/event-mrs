@@ -155,3 +155,36 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 
 	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(updatedEvent)})
 }
+
+func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
+	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	deleteEventParams := database.DeleteEventParams {
+		ID: eventId,
+		UserID: userId,
+	}
+
+	deleteEventError := eventAPIConfig.DB.DeleteEvent(ginContext, deleteEventParams)
+
+	if deleteEventError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error deleting event, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully"})
+}
