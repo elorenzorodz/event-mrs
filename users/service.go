@@ -69,7 +69,7 @@ func (userAPIConfig *UserAPIConfig) RegisterUser(ginContext *gin.Context) {
 	newUser, createUserError := userAPIConfig.DB.CreateUser(ginContext,createUserParams)
 
 	if createUserError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": createUserError.Error()})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": createUserError.Error()})
 
 		return
 	}
@@ -95,7 +95,7 @@ func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
 	getUser, getUserError := userAPIConfig.DB.GetUserByEmail(ginContext, params.Email)
 
 	if getUserError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid email or password"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
 
 		return
 	}
@@ -124,7 +124,7 @@ func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
 
 	if readPrivateKeyError != nil {
 		log.Printf("Private key read file error %v", readPrivateKeyError)
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to login, please try again in a few minutes"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
 
 		return
 	}
@@ -133,7 +133,7 @@ func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
 
 	if parsePrivateKeyError != nil {
 		log.Printf("Parse private key error %v", parsePrivateKeyError)
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to login, please try again in a few minutes"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
 
 		return
 	}
@@ -142,7 +142,7 @@ func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
 
 	if signedTokenError != nil {
 		log.Printf("Signing token error %v", signedTokenError)
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to login, please try again in a few minutes"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
 
 		return
 	}
