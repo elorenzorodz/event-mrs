@@ -20,3 +20,9 @@ type Event struct {
 	UpdatedAt string `json:"updated_at"`
 	UserID uuid.UUID `json:"user_id"`
 }
+
+type EventParameters struct {
+	Title       string `json:"title" binding:"required"`
+	Description string `json:"description" binding:"required"`
+	Organizer   string `json:"organizer"`
+}

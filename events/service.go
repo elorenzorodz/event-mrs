@@ -10,16 +10,10 @@ import (
 )
 
 func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
-	type parameters struct {
-		Title       string `json:"title" binding:"required"`
-		Description string `json:"description" binding:"required"`
-		Organizer   string `json:"organizer"`
-	}
-
-	params := parameters{}
+	eventParams := EventParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&params); parameterBindError != nil {
+	if parameterBindError := ginContext.ShouldBindJSON(&eventParams); parameterBindError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
 
 		return
@@ -35,9 +29,9 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 
 	createEventParams := database.CreateEventParams {
 		ID: uuid.New(),
-		Title: params.Title,
-		Description: params.Description,
-		Organizer: common.StringToNullString(params.Organizer),
+		Title: eventParams.Title,
+		Description: eventParams.Description,
+		Organizer: common.StringToNullString(eventParams.Organizer),
 		UserID: userId,
 	}
 
@@ -114,16 +108,10 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	type parameters struct {
-		Title       string `json:"title" binding:"required"`
-		Description string `json:"description" binding:"required"`
-		Organizer   string `json:"organizer"`
-	}
-
-	params := parameters{}
+	eventParams := EventParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&params); parameterBindError != nil {
+	if parameterBindError := ginContext.ShouldBindJSON(&eventParams); parameterBindError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
 
 		return
@@ -139,9 +127,9 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 
 	updateEventParams := database.UpdateEventParams {
 		ID: eventId,
-		Title: params.Title,
-		Description: params.Description,
-		Organizer: common.StringToNullString(params.Organizer),
+		Title: eventParams.Title,
+		Description: eventParams.Description,
+		Organizer: common.StringToNullString(eventParams.Organizer),
 		UserID: userId,
 	}
 
