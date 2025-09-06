@@ -21,6 +21,17 @@ type Event struct {
 	UserID      uuid.UUID
 }
 
+type EventDetail struct {
+	ID                uuid.UUID
+	ShowDate          time.Time
+	Price             string
+	NumberOfTickets   int32
+	TicketDescription string
+	CreatedAt         time.Time
+	UpdatedAt         sql.NullTime
+	EventID           uuid.UUID
+}
+
 type User struct {
 	ID        uuid.UUID
 	Firstname string
