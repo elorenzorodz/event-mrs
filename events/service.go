@@ -43,6 +43,9 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 		return
 	}
 
+	// Save ticket details.
+	
+
 	ginContext.JSON(http.StatusCreated, gin.H{"event": DatabaseEventToEventJSON(newEvent)})
 }
 
