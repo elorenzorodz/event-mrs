@@ -109,3 +109,39 @@ func (q *Queries) GetUserEvents(ctx context.Context, userID uuid.UUID) ([]Event,
 	}
 	return items, nil
 }
+
+const updateEvent = `-- name: UpdateEvent :one
+UPDATE events
+SET title = $1, description = $2, organizer = $3, updated_at = NOW()
+WHERE id = $4 AND user_id= $5
+RETURNING id, title, description, organizer, created_at, updated_at, user_id
+`
+
+type UpdateEventParams struct {
+	Title       string
+	Description string
+	Organizer   sql.NullString
+	ID          uuid.UUID
+	UserID      uuid.UUID
+}
+
+func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event, error) {
+	row := q.db.QueryRowContext(ctx, updateEvent,
+		arg.Title,
+		arg.Description,
+		arg.Organizer,
+		arg.ID,
+		arg.UserID,
+	)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Description,
+		&i.Organizer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+	)
+	return i, err
+}

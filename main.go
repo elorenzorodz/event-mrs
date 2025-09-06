@@ -31,9 +31,9 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	v1 := router.Group("/api/" + apiVersion)
+	routerAPIPrefix := router.Group("/api/" + apiVersion)
 
-	v1.GET("/ping", func(ginContext *gin.Context) {
+	routerAPIPrefix.GET("/ping", func(ginContext *gin.Context) {
 		ginContext.JSON(http.StatusOK, gin.H { "message": "pong" })
 	})
 
@@ -41,19 +41,20 @@ func main() {
 		DB: database,
 	}
 
-	v1.POST("/account/register", userAPIConfig.RegisterUser)
-	v1.POST("/account/login", userAPIConfig.LoginUser)
+	routerAPIPrefix.POST("/account/register", userAPIConfig.RegisterUser)
+	routerAPIPrefix.POST("/account/login", userAPIConfig.LoginUser)
 
 	eventAPIConfig := events.EventAPIConfig {
 		DB: database,
 	}
 	
-	v1WithAuthorization := v1.Group("")
-	v1WithAuthorization.Use(middleware.AuthorizationMiddleware(&userAPIConfig))
+	routerWithAuthorization := routerAPIPrefix.Group("")
+	routerWithAuthorization.Use(middleware.AuthorizationMiddleware(&userAPIConfig))
 
-	v1WithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)
-	v1WithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
-	v1WithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
+	routerWithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)
+	routerWithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
+	routerWithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
+	routerWithAuthorization.PUT("/events/:eventId", eventAPIConfig.UpdateEvent)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 

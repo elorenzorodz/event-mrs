@@ -25,7 +25,7 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(string))
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
 
 	if parseUserIdError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
@@ -102,5 +102,56 @@ func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) 
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventToEventJSON(getUserEvent)})
+	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(getUserEvent)})
+}
+
+func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
+	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	type parameters struct {
+		Title       string `json:"title" binding:"required"`
+		Description string `json:"description" binding:"required"`
+		Organizer   string `json:"organizer"`
+	}
+
+	params := parameters{}
+
+	// Bind incoming JSON to struct and check for errors in the process.
+	if parameterBindError := ginContext.ShouldBindJSON(&params); parameterBindError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
+
+		return
+	}
+
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	updateEventParams := database.UpdateEventParams {
+		ID: eventId,
+		Title: params.Title,
+		Description: params.Description,
+		Organizer: common.StringToNullString(params.Organizer),
+		UserID: userId,
+	}
+
+	updatedEvent, updatedEventError := eventAPIConfig.DB.UpdateEvent(ginContext, updateEventParams)
+
+	if updatedEventError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error updating event, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(updatedEvent)})
 }
