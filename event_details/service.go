@@ -45,7 +45,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 		EventID: eventId,
 	}
 
-	newEventDetail, createEventDetailError := eventDetailAPIConfig.DB.CreateEventDetail(ginContext, createEventDetailParams)
+	newEventDetail, createEventDetailError := eventDetailAPIConfig.DB.CreateEventDetail(ginContext.Request.Context(), createEventDetailParams)
 
 	if createEventDetailError != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error" : "error creating event detail, please try again in a few minutes"})

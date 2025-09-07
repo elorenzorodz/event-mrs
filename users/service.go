@@ -66,7 +66,7 @@ func (userAPIConfig *UserAPIConfig) RegisterUser(ginContext *gin.Context) {
 		Password: hashedPassword,
 	}
 
-	newUser, createUserError := userAPIConfig.DB.CreateUser(ginContext,createUserParams)
+	newUser, createUserError := userAPIConfig.DB.CreateUser(ginContext.Request.Context(), createUserParams)
 
 	if createUserError != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": createUserError.Error()})
@@ -92,7 +92,7 @@ func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
 		return
 	}
 
-	getUser, getUserError := userAPIConfig.DB.GetUserByEmail(ginContext, params.Email)
+	getUser, getUserError := userAPIConfig.DB.GetUserByEmail(ginContext.Request.Context(), params.Email)
 
 	if getUserError != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
