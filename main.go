@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/elorenzorodz/event-mrs/common"
+	"github.com/elorenzorodz/event-mrs/event_details"
 	"github.com/elorenzorodz/event-mrs/events"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/elorenzorodz/event-mrs/middleware"
@@ -44,18 +45,24 @@ func main() {
 	routerAPIPrefix.POST("/account/register", userAPIConfig.RegisterUser)
 	routerAPIPrefix.POST("/account/login", userAPIConfig.LoginUser)
 
+	routerWithAuthorization := routerAPIPrefix.Group("")
+	routerWithAuthorization.Use(middleware.AuthorizationMiddleware(&userAPIConfig))
+
 	eventAPIConfig := events.EventAPIConfig {
 		DB: database,
 	}
-	
-	routerWithAuthorization := routerAPIPrefix.Group("")
-	routerWithAuthorization.Use(middleware.AuthorizationMiddleware(&userAPIConfig))
 
 	routerWithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)
 	routerWithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
 	routerWithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
 	routerWithAuthorization.PUT("/events/:eventId", eventAPIConfig.UpdateEvent)
 	routerWithAuthorization.DELETE("/events/:eventId", eventAPIConfig.DeleteEvent)
+
+	eventDetailAPIConfig := event_details.EventDetailAPIConfig {
+		DB: database,
+	}
+
+	routerWithAuthorization.POST("/events/:eventId/details", eventDetailAPIConfig.CreateEventDetail)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 

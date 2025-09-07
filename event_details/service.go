@@ -3,6 +3,7 @@ package event_details
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/gin-gonic/gin"
@@ -22,14 +23,23 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 	// Bind incoming JSON to struct and check for errors in the process.
 	if parameterBindError := ginContext.ShouldBindJSON(&eventDetailParams); parameterBindError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present and/or numbers are not be quoted"})
 
+		return
+	}
+
+	referenceShowDateFormat := "2006-01-02 15:04"
+	showDate, parseShowDateError := time.Parse(referenceShowDateFormat, eventDetailParams.ShowDate)
+
+	if parseShowDateError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
+		
 		return
 	}
 
 	createEventDetailParams := database.CreateEventDetailParams {
 		ID: uuid.New(),
-		ShowDate: eventDetailParams.ShowDate,
+		ShowDate: showDate,
 		Price: fmt.Sprintf("%.2f", eventDetailParams.Price),
 		NumberOfTickets: eventDetailParams.NumberOfTickets,
 		TicketDescription: eventDetailParams.TicketDescription,
@@ -46,3 +56,4 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 	ginContext.JSON(http.StatusCreated, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(newEventDetail)})
 }
+

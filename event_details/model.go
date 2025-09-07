@@ -12,10 +12,10 @@ type EventDetailAPIConfig struct {
 }
 
 type EventDetail struct {
-	ID                uuid.UUID    `json:"id"`
-	ShowDate          time.Time    `json:"show_date"`
-	Price             float32    `json:"price"`
-	NumberOfTickets   int32    `json:"number_of_tickets"`
+	ID                uuid.UUID `json:"id"`
+	ShowDate          time.Time `json:"show_date"`
+	Price             float32   `json:"price"`
+	NumberOfTickets   int32     `json:"number_of_tickets"`
 	TicketDescription string    `json:"ticket_description"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         string    `json:"updated_at"`
@@ -23,8 +23,8 @@ type EventDetail struct {
 }
 
 type EventDetailParameters struct {
-	ShowDate          time.Time `json:"show_date" binding:"required"`
-	TicketDescription string `json:"description" binding:"required"`
+	ShowDate          string  `json:"show_date" binding:"required"`
+	TicketDescription string  `json:"description" binding:"required"`
 	Price             float32 `json:"price"`
-	NumberOfTickets   int32 `json:"number_of_tickets"`
+	NumberOfTickets   int32   `json:"number_of_tickets" binding:"required"`
 }
