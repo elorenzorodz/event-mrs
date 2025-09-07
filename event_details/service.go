@@ -3,8 +3,8 @@ package event_details
 import (
 	"fmt"
 	"net/http"
-	"time"
 
+	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -28,8 +28,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 		return
 	}
 
-	referenceShowDateFormat := "2006-01-02 15:04"
-	showDate, parseShowDateError := time.Parse(referenceShowDateFormat, eventDetailParams.ShowDate)
+	showDate, referenceShowDateFormat, parseShowDateError := common.StringToTime(eventDetailParams.ShowDate)
 
 	if parseShowDateError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
@@ -56,4 +55,3 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 	ginContext.JSON(http.StatusCreated, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(newEventDetail)})
 }
-

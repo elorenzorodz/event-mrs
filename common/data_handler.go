@@ -1,6 +1,9 @@
 package common
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 func StringToNullString(text string) sql.NullString {
 	if text == "" {
@@ -16,4 +19,11 @@ func NullTimeToString(nullString sql.NullTime) string {
 	}
 
 	return nullString.Time.String()
+}
+
+func StringToTime(dateTime string) (time.Time, string, error) {
+	referenceShowDateFormat := "2006-01-02 15:04"
+	showDate, parseShowDateError := time.Parse(referenceShowDateFormat, dateTime)
+
+	return showDate, referenceShowDateFormat, parseShowDateError
 }
