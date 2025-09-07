@@ -48,7 +48,7 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 	newTickets, createTicketsError := SaveEventTickets(eventAPIConfig.DB, ginContext.Request.Context(), newEvent.ID, eventParams.Tickets)
 
 	if createTicketsError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"event": DatabaseEventToEventJSON(newEvent, newTickets), "error": "error creating some details/tickets, please create separately the event details/tickets"})
+		ginContext.JSON(http.StatusMultiStatus, gin.H{"event": DatabaseEventToEventJSON(newEvent, newTickets), "error": "error creating some details/tickets, please create separately the event details/tickets"})
 
 		return
 	}

@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/elorenzorodz/event-mrs/common"
@@ -89,11 +90,17 @@ func SaveEventTickets(db *database.Queries, context context.Context, eventId uui
 		close(errorChannel)
 	}()
 
+	var allErrors []string
+
 	for err := range errorChannel {
 		if err != nil {
-			// Return empty map and error if any occurred.
-			return newTickets, err
+			allErrors = append(allErrors, err.Error())
 		}
+	}
+
+	// This ensures that if there were any errors, we still return the tickets that were created successfully.
+	if len(allErrors) > 0 {
+		return newTickets, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
 	}
 
 	return newTickets, nil
