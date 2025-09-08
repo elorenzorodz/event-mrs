@@ -16,6 +16,11 @@ import (
 )
 
 func main() {
+	// TODO: Create new table to handle event reservations.
+	// TODO: Add Stripe payment integration for event reservations.
+	// TODO: Add email alert whenever the event is updated or deleted.
+	// TODO: Add email alert whenever the event detail is updated or deleted.
+
 	godotenv.Load(".env.dev")
 
 	port := common.GetEnvVariable("PORT")
