@@ -17,7 +17,9 @@ import (
 
 func main() {
 	// TODO: Create new table to handle event reservations.
+	// TODO: Create new table to handle event reservation payments.
 	// TODO: Add Stripe payment integration for event reservations.
+	// TODO: Send email confirmation for payment and reservation.
 	// TODO: Add email alert whenever the event is updated or deleted.
 	// TODO: Add email alert whenever the event detail is updated or deleted.
 
