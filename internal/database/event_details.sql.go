@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 const createEventDetail = `-- name: CreateEventDetail :one
@@ -48,4 +49,42 @@ func (q *Queries) CreateEventDetail(ctx context.Context, arg CreateEventDetailPa
 		&i.EventID,
 	)
 	return i, err
+}
+
+const getEventDetailsByEventId = `-- name: GetEventDetailsByEventId :many
+SELECT id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id 
+FROM event_details 
+WHERE event_id = ANY($1)
+`
+
+func (q *Queries) GetEventDetailsByEventId(ctx context.Context, eventID []uuid.UUID) ([]EventDetail, error) {
+	rows, err := q.db.QueryContext(ctx, getEventDetailsByEventId, pq.Array(eventID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventDetail
+	for rows.Next() {
+		var i EventDetail
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShowDate,
+			&i.Price,
+			&i.NumberOfTickets,
+			&i.TicketDescription,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EventID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -2,6 +2,8 @@ package common
 
 import (
 	"database/sql"
+	"log"
+	"strconv"
 	"time"
 )
 
@@ -26,4 +28,18 @@ func StringToTime(dateTime string) (time.Time, string, error) {
 	showDate, parseShowDateError := time.Parse(referenceShowDateFormat, dateTime)
 
 	return showDate, referenceShowDateFormat, parseShowDateError
+}
+
+func StringToFloat32(number string) float32 {
+	price, priceParseFloatError := strconv.ParseFloat(number, 32)
+
+	if priceParseFloatError != nil {
+		log.Printf("error parsing event detail price [%s]: %v", number, priceParseFloatError)
+
+		price = 0.00
+	}
+
+	price32 := float32(price)
+
+	return price32
 }

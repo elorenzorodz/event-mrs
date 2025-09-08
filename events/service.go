@@ -1,6 +1,7 @@
 package events
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/elorenzorodz/event-mrs/common"
@@ -28,12 +29,12 @@ func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	createEventParams := database.CreateEventParams {
-		ID: uuid.New(),
-		Title: eventParams.Title,
+	createEventParams := database.CreateEventParams{
+		ID:          uuid.New(),
+		Title:       eventParams.Title,
 		Description: eventParams.Description,
-		Organizer: common.StringToNullString(eventParams.Organizer),
-		UserID: userId,
+		Organizer:   common.StringToNullString(eventParams.Organizer),
+		UserID:      userId,
 	}
 
 	newEvent, createEventError := eventAPIConfig.DB.CreateEvent(ginContext.Request.Context(), createEventParams)
@@ -73,7 +74,35 @@ func (eventAPIConfig *EventAPIConfig) GetUserEvents(ginContext *gin.Context) {
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventsToEventsJSON(userEvents, map[string][]event_details.EventDetail{})})
+	eventIdArray := []uuid.UUID{}
+
+	for _, event := range userEvents {
+		eventIdArray = append(eventIdArray, event.ID)
+	}
+
+	eventDetails, getEventDetailsError := eventAPIConfig.DB.GetEventDetailsByEventId(ginContext.Request.Context(), eventIdArray)
+	
+	// Get event details from all fetched events.
+	eventDetailsMap := make(map[string][]event_details.EventDetail)
+
+	if getEventDetailsError != nil {
+		log.Printf("error retrieving event details: %v", getEventDetailsError)
+	} else {
+		for _, detail := range eventDetails {
+			eventDetailsMap[detail.EventID.String()] = append(eventDetailsMap[detail.EventID.String()], event_details.EventDetail{
+				ID:                detail.ID,
+				ShowDate:          detail.ShowDate,
+				Price:             common.StringToFloat32(detail.Price),
+				NumberOfTickets:   detail.NumberOfTickets,
+				TicketDescription: detail.TicketDescription,
+				CreatedAt:         detail.CreatedAt,
+				UpdatedAt:         common.NullTimeToString(detail.UpdatedAt),
+				EventID:           detail.EventID,
+			})
+		}
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"events": DatabaseEventsToEventsJSON(userEvents, eventDetailsMap)})
 }
 
 func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) {
@@ -93,8 +122,8 @@ func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) 
 		return
 	}
 
-	getUserEventByIdParams := database.GetUserEventByIdParams {
-		ID: eventId,
+	getUserEventByIdParams := database.GetUserEventByIdParams{
+		ID:     eventId,
 		UserID: userId,
 	}
 
@@ -106,7 +135,31 @@ func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) 
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(getUserEvent, []event_details.EventDetail{})})
+	eventIdArray := []uuid.UUID{getUserEvent.ID}
+
+	eventDetails, getEventDetailsError := eventAPIConfig.DB.GetEventDetailsByEventId(ginContext.Request.Context(), eventIdArray)
+	
+	// Get event details from all fetched events.
+	eventDetailsList := []event_details.EventDetail{}
+
+	if getEventDetailsError != nil {
+		log.Printf("error retrieving event details: %v", getEventDetailsError)
+	} else {
+		for _, detail := range eventDetails {
+			eventDetailsList = append(eventDetailsList, event_details.EventDetail{
+				ID:                detail.ID,
+				ShowDate:          detail.ShowDate,
+				Price:             common.StringToFloat32(detail.Price),
+				NumberOfTickets:   detail.NumberOfTickets,
+				TicketDescription: detail.TicketDescription,
+				CreatedAt:         detail.CreatedAt,
+				UpdatedAt:         common.NullTimeToString(detail.UpdatedAt),
+				EventID:           detail.EventID,
+			})
+		}
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(getUserEvent, eventDetailsList)})
 }
 
 func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
@@ -135,12 +188,12 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	updateEventParams := database.UpdateEventParams {
-		ID: eventId,
-		Title: eventParams.Title,
+	updateEventParams := database.UpdateEventParams{
+		ID:          eventId,
+		Title:       eventParams.Title,
 		Description: eventParams.Description,
-		Organizer: common.StringToNullString(eventParams.Organizer),
-		UserID: userId,
+		Organizer:   common.StringToNullString(eventParams.Organizer),
+		UserID:      userId,
 	}
 
 	updatedEvent, updatedEventError := eventAPIConfig.DB.UpdateEvent(ginContext.Request.Context(), updateEventParams)
@@ -171,8 +224,8 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 		return
 	}
 
-	deleteEventParams := database.DeleteEventParams {
-		ID: eventId,
+	deleteEventParams := database.DeleteEventParams{
+		ID:     eventId,
 		UserID: userId,
 	}
 
