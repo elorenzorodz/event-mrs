@@ -51,6 +51,20 @@ func (q *Queries) CreateEventDetail(ctx context.Context, arg CreateEventDetailPa
 	return i, err
 }
 
+const deleteEventDetail = `-- name: DeleteEventDetail :exec
+DELETE FROM event_details WHERE id = $1 AND event_id = $2
+`
+
+type DeleteEventDetailParams struct {
+	ID      uuid.UUID
+	EventID uuid.UUID
+}
+
+func (q *Queries) DeleteEventDetail(ctx context.Context, arg DeleteEventDetailParams) error {
+	_, err := q.db.ExecContext(ctx, deleteEventDetail, arg.ID, arg.EventID)
+	return err
+}
+
 const getEventDetailsByEventId = `-- name: GetEventDetailsByEventId :many
 SELECT id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id 
 FROM event_details 

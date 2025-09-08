@@ -13,3 +13,6 @@ UPDATE event_details
 SET show_date = $1, price = $2, number_of_tickets = $3, ticket_description = $4, updated_at = NOW()
 WHERE id = $5 AND event_id = $6
 RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id;
+
+-- name: DeleteEventDetail :exec
+DELETE FROM event_details WHERE id = $1 AND event_id = $2;
