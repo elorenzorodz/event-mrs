@@ -88,3 +88,42 @@ func (q *Queries) GetEventDetailsByEventId(ctx context.Context, eventID []uuid.U
 	}
 	return items, nil
 }
+
+const updateEventDetail = `-- name: UpdateEventDetail :one
+UPDATE event_details
+SET show_date = $1, price = $2, number_of_tickets = $3, ticket_description = $4, updated_at = NOW()
+WHERE id = $5 AND event_id = $6
+RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id
+`
+
+type UpdateEventDetailParams struct {
+	ShowDate          time.Time
+	Price             string
+	NumberOfTickets   int32
+	TicketDescription string
+	ID                uuid.UUID
+	EventID           uuid.UUID
+}
+
+func (q *Queries) UpdateEventDetail(ctx context.Context, arg UpdateEventDetailParams) (EventDetail, error) {
+	row := q.db.QueryRowContext(ctx, updateEventDetail,
+		arg.ShowDate,
+		arg.Price,
+		arg.NumberOfTickets,
+		arg.TicketDescription,
+		arg.ID,
+		arg.EventID,
+	)
+	var i EventDetail
+	err := row.Scan(
+		&i.ID,
+		&i.ShowDate,
+		&i.Price,
+		&i.NumberOfTickets,
+		&i.TicketDescription,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EventID,
+	)
+	return i, err
+}

@@ -55,3 +55,57 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 	ginContext.JSON(http.StatusCreated, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(newEventDetail)})
 }
+
+func (eventDetailAPIConfig *EventDetailAPIConfig) UpdateEventDetail(ginContext *gin.Context) {
+	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	eventDetailId, parseEventDetailIdError := uuid.Parse(ginContext.Param("eventDetailId"))
+
+	if parseEventDetailIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event detail ID"})
+
+		return
+	}
+
+	eventDetailParams := EventDetailParameters{}
+
+	// Bind incoming JSON to struct and check for errors in the process.
+	if parameterBindError := ginContext.ShouldBindJSON(&eventDetailParams); parameterBindError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present and/or numbers are not be quoted"})
+
+		return
+	}
+
+	showDate, referenceShowDateFormat, parseShowDateError := common.StringToTime(eventDetailParams.ShowDate)
+
+	if parseShowDateError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
+		
+		return
+	}
+
+	updateEventDetailParams := database.UpdateEventDetailParams {
+		ID: eventDetailId,
+		ShowDate: showDate,
+		Price: fmt.Sprintf("%.2f", eventDetailParams.Price),
+		NumberOfTickets: eventDetailParams.NumberOfTickets,
+		TicketDescription: eventDetailParams.TicketDescription,
+		EventID: eventId,
+	}
+
+	updatedEventDetail, updateEventDetailError := eventDetailAPIConfig.DB.UpdateEventDetail(ginContext.Request.Context(), updateEventDetailParams)
+
+	if updateEventDetailError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error" : "error updating event detail, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(updatedEventDetail)})
+}
