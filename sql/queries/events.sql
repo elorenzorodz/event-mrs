@@ -21,3 +21,11 @@ RETURNING id, title, description, organizer, created_at, updated_at, user_id;
 
 -- name: DeleteEvent :exec
 DELETE FROM events WHERE id = $1 AND user_id = $2;
+
+-- name: GetEvents :many
+SELECT * 
+FROM events
+WHERE 
+title LIKE '%$1%' 
+OR description LIKE '%2%'
+OR organizer LIKE '%3%';
