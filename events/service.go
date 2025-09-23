@@ -3,6 +3,7 @@ package events
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/event_details"
@@ -238,4 +239,36 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 	}
 
 	ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully"})
+}
+
+func (eventAPIConfig *EventAPIConfig) GetEvents(ginContext *gin.Context) {	
+	searchQuery := "%%"
+	currentDateTime := time.Now().UTC()
+
+	// First day of next month
+	firstDayOfNextMonth := time.Date(currentDateTime.Year(), currentDateTime.Month() + 1, 1, 0, 0, 0, 0, currentDateTime.Location())
+
+	// Subtract one day to get the last day of current month.
+	lastDayOfCurrentMonth := firstDayOfNextMonth.AddDate(0, 0, -1)
+
+	startDate := time.Date(currentDateTime.Year(), currentDateTime.Month(), currentDateTime.Day(), 0, 0, 0, 0, currentDateTime.Location())
+	endDate := time.Date(currentDateTime.Year(), currentDateTime.Month(), lastDayOfCurrentMonth.Day(), 23, 59, 59, 0, currentDateTime.Location())
+
+	getEventsParam := database.GetEventsParams {
+		Title: searchQuery,
+		Description: searchQuery,
+		Organizer: common.StringToNullString(searchQuery),
+		ShowDate: startDate,
+		ShowDate_2: endDate,
+	}
+
+	getSearchEvents, getEventsError := eventAPIConfig.DB.GetEvents(ginContext.Request.Context(), getEventsParam)
+
+	if getEventsError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error searching events, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, DatabaseSearchEventsToSearchEventsJSON(getSearchEvents))
 }

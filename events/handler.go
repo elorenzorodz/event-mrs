@@ -41,6 +41,28 @@ func DatabaseEventsToEventsJSON(databaseEvents []database.Event, eventDetailsMap
 	return events
 }
 
+func DatabaseSearchEventsToSearchEventsJSON(databaseSearchEvents []database.GetEventsRow) []SearchEvent {
+	searchEvents := []SearchEvent{}
+
+	for _, databaseSearchEvent := range databaseSearchEvents {
+		searchEvent := SearchEvent {
+			EventID: databaseSearchEvent.EventID,
+			Title: databaseSearchEvent.Title,
+			Description: databaseSearchEvent.Description,
+			Organizer: databaseSearchEvent.Organizer.String,
+			EventDetailID: databaseSearchEvent.EventID,
+			ShowDate: common.NullTimeToString(databaseSearchEvent.ShowDate),
+			Price: common.StringToFloat32(databaseSearchEvent.Price.String),
+			NumberOfTickets: databaseSearchEvent.NumberOfTickets.Int32,
+			TicketDescription: databaseSearchEvent.TicketDescription.String,
+		}
+
+		searchEvents = append(searchEvents, searchEvent)
+	}
+
+	return searchEvents
+}
+
 func SaveEventTickets(db *database.Queries, context context.Context, eventId uuid.UUID, tickets []event_details.EventDetailParameters) ([]event_details.EventDetail, error) {
 	var (
 		newTickets []event_details.EventDetail

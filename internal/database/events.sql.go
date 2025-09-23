@@ -8,6 +8,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -59,6 +60,86 @@ type DeleteEventParams struct {
 func (q *Queries) DeleteEvent(ctx context.Context, arg DeleteEventParams) error {
 	_, err := q.db.ExecContext(ctx, deleteEvent, arg.ID, arg.UserID)
 	return err
+}
+
+const getEvents = `-- name: GetEvents :many
+SELECT 
+	e.id AS event_id,
+	e.title,
+	e.description,
+	e.organizer,
+	ed.id AS event_detail_id,
+	ed.show_date,
+	ed.price,
+	ed.number_of_tickets,
+	ed.ticket_description
+FROM events AS e
+LEFT JOIN event_details AS ed
+ON ed.event_id = e.id
+WHERE 
+LOWER(e.title) LIKE $1 
+OR LOWER(e.description) LIKE $2 
+OR LOWER(e.organizer) LIKE $3 
+OR (ed.show_date >= $4 AND ed.show_date <= $5)
+`
+
+type GetEventsParams struct {
+	Title       string
+	Description string
+	Organizer   sql.NullString
+	ShowDate    time.Time
+	ShowDate_2  time.Time
+}
+
+type GetEventsRow struct {
+	EventID           uuid.UUID
+	Title             string
+	Description       string
+	Organizer         sql.NullString
+	EventDetailID     uuid.NullUUID
+	ShowDate          sql.NullTime
+	Price             sql.NullString
+	NumberOfTickets   sql.NullInt32
+	TicketDescription sql.NullString
+}
+
+func (q *Queries) GetEvents(ctx context.Context, arg GetEventsParams) ([]GetEventsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getEvents,
+		arg.Title,
+		arg.Description,
+		arg.Organizer,
+		arg.ShowDate,
+		arg.ShowDate_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEventsRow
+	for rows.Next() {
+		var i GetEventsRow
+		if err := rows.Scan(
+			&i.EventID,
+			&i.Title,
+			&i.Description,
+			&i.Organizer,
+			&i.EventDetailID,
+			&i.ShowDate,
+			&i.Price,
+			&i.NumberOfTickets,
+			&i.TicketDescription,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserEventById = `-- name: GetUserEventById :one

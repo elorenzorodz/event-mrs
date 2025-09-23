@@ -23,9 +23,21 @@ RETURNING id, title, description, organizer, created_at, updated_at, user_id;
 DELETE FROM events WHERE id = $1 AND user_id = $2;
 
 -- name: GetEvents :many
-SELECT * 
-FROM events
+SELECT 
+	e.id AS event_id,
+	e.title,
+	e.description,
+	e.organizer,
+	ed.id AS event_detail_id,
+	ed.show_date,
+	ed.price,
+	ed.number_of_tickets,
+	ed.ticket_description
+FROM events AS e
+LEFT JOIN event_details AS ed
+ON ed.event_id = e.id
 WHERE 
-title LIKE '%$1%' 
-OR description LIKE '%2%'
-OR organizer LIKE '%3%';
+LOWER(e.title) LIKE $1 
+OR LOWER(e.description) LIKE $2 
+OR LOWER(e.organizer) LIKE $3 
+OR (ed.show_date >= $4 AND ed.show_date <= $5);
