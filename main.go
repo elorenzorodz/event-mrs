@@ -61,7 +61,7 @@ func main() {
 
 	routerWithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)
 	routerWithAuthorization.GET("/events/:eventId", eventAPIConfig.GetUserEventById)
-	routerWithAuthorization.GET("/events/search", eventAPIConfig.GetEvents)
+	routerWithAuthorization.GET("/events/filter", eventAPIConfig.GetEvents)
 	routerWithAuthorization.POST("/events", eventAPIConfig.CreateEvent)
 	routerWithAuthorization.PUT("/events/:eventId", eventAPIConfig.UpdateEvent)
 	routerWithAuthorization.DELETE("/events/:eventId", eventAPIConfig.DeleteEvent)

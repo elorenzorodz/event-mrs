@@ -77,10 +77,10 @@ FROM events AS e
 LEFT JOIN event_details AS ed
 ON ed.event_id = e.id
 WHERE 
-LOWER(e.title) LIKE $1 
+(LOWER(e.title) LIKE $1 
 OR LOWER(e.description) LIKE $2 
-OR LOWER(e.organizer) LIKE $3 
-OR (ed.show_date >= $4 AND ed.show_date <= $5)
+OR LOWER(e.organizer) LIKE $3) 
+AND (ed.show_date >= $4 AND ed.show_date <= $5)
 `
 
 type GetEventsParams struct {

@@ -1,8 +1,10 @@
 package events
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/common"
@@ -241,25 +243,69 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 	ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully"})
 }
 
-func (eventAPIConfig *EventAPIConfig) GetEvents(ginContext *gin.Context) {	
-	searchQuery := "%%"
+func (eventAPIConfig *EventAPIConfig) GetEvents(ginContext *gin.Context) {
+	searchQuery := ginContext.Query("search")
+
+	if strings.TrimSpace(searchQuery) == "" {
+		searchQuery = "%%"
+	} else {
+		searchQuery = fmt.Sprintf("%s%s%s", "%", strings.ToLower(searchQuery), "%")
+	}
+	
+	startShowDateQuery := ginContext.Query("startShowDate")
+	endShowDateQuery := ginContext.Query("endShowDate")
+
+	var startShowDate time.Time
+	var endShowDate time.Time
+
 	currentDateTime := time.Now().UTC()
 
-	// First day of next month
-	firstDayOfNextMonth := time.Date(currentDateTime.Year(), currentDateTime.Month() + 1, 1, 0, 0, 0, 0, currentDateTime.Location())
+	if strings.TrimSpace(startShowDateQuery) == "" {
+		startShowDate = time.Date(currentDateTime.Year(), currentDateTime.Month(), currentDateTime.Day(), 0, 0, 0, 0, currentDateTime.Location())
+	} else {
+		// Append HH:mm:ss to avoid error with common.StringToTime()
+		startShowDateQuery = fmt.Sprintf("%s 00:00", startShowDateQuery)
 
-	// Subtract one day to get the last day of current month.
-	lastDayOfCurrentMonth := firstDayOfNextMonth.AddDate(0, 0, -1)
+		parsedShowDate, referenceShowDateFormat, parseShowDateError := common.StringToTime(startShowDateQuery)
 
-	startDate := time.Date(currentDateTime.Year(), currentDateTime.Month(), currentDateTime.Day(), 0, 0, 0, 0, currentDateTime.Location())
-	endDate := time.Date(currentDateTime.Year(), currentDateTime.Month(), lastDayOfCurrentMonth.Day(), 23, 59, 59, 0, currentDateTime.Location())
+		if parseShowDateError != nil {
+			ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date '%s': expected format %s", startShowDateQuery, referenceShowDateFormat)})
+
+			return
+		}
+
+		startShowDate = parsedShowDate
+	}
+
+	if strings.TrimSpace(endShowDateQuery) == "" {
+		// First day of next month
+		firstDayOfNextMonth := time.Date(currentDateTime.Year(), currentDateTime.Month() + 1, 1, 0, 0, 0, 0, currentDateTime.Location())
+
+		// Subtract one day to get the last day of current month.
+		lastDayOfCurrentMonth := firstDayOfNextMonth.AddDate(0, 0, -1)
+
+		endShowDate = time.Date(currentDateTime.Year(), currentDateTime.Month(), lastDayOfCurrentMonth.Day(), 23, 59, 59, 0, currentDateTime.Location())
+	} else {
+		// Append HH:mm:ss to avoid error with common.StringToTime()
+		endShowDateQuery = fmt.Sprintf("%s 23:59", endShowDateQuery)
+
+		parsedEndDate, referenceShowDateFormat, parseEndDateError := common.StringToTime(endShowDateQuery)
+
+		if parseEndDateError != nil {
+			ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date '%s': expected format %s", endShowDateQuery, referenceShowDateFormat)})
+
+			return
+		}
+
+		endShowDate = parsedEndDate
+	}
 
 	getEventsParam := database.GetEventsParams {
 		Title: searchQuery,
 		Description: searchQuery,
 		Organizer: common.StringToNullString(searchQuery),
-		ShowDate: startDate,
-		ShowDate_2: endDate,
+		ShowDate: startShowDate,
+		ShowDate_2: endShowDate,
 	}
 
 	getSearchEvents, getEventsError := eventAPIConfig.DB.GetEvents(ginContext.Request.Context(), getEventsParam)
