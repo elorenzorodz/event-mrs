@@ -16,6 +16,7 @@ type EventDetail struct {
 	ShowDate          time.Time `json:"show_date"`
 	Price             float32   `json:"price"`
 	NumberOfTickets   int32     `json:"number_of_tickets"`
+	TicketsRemaining  int32     `json:"tickets_remaining"`
 	TicketDescription string    `json:"ticket_description"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         string    `json:"updated_at"`

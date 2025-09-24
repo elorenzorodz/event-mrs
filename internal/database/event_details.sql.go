@@ -14,9 +14,9 @@ import (
 )
 
 const createEventDetail = `-- name: CreateEventDetail :one
-INSERT INTO event_details (id, show_date, price, number_of_tickets, ticket_description, event_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id
+INSERT INTO event_details (id, show_date, price, number_of_tickets, ticket_description, tickets_remaining, event_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id, tickets_remaining
 `
 
 type CreateEventDetailParams struct {
@@ -25,6 +25,7 @@ type CreateEventDetailParams struct {
 	Price             string
 	NumberOfTickets   int32
 	TicketDescription string
+	TicketsRemaining  int32
 	EventID           uuid.UUID
 }
 
@@ -35,6 +36,7 @@ func (q *Queries) CreateEventDetail(ctx context.Context, arg CreateEventDetailPa
 		arg.Price,
 		arg.NumberOfTickets,
 		arg.TicketDescription,
+		arg.TicketsRemaining,
 		arg.EventID,
 	)
 	var i EventDetail
@@ -47,6 +49,7 @@ func (q *Queries) CreateEventDetail(ctx context.Context, arg CreateEventDetailPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.TicketsRemaining,
 	)
 	return i, err
 }
@@ -66,9 +69,7 @@ func (q *Queries) DeleteEventDetail(ctx context.Context, arg DeleteEventDetailPa
 }
 
 const getEventDetailsByEventId = `-- name: GetEventDetailsByEventId :many
-SELECT id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id 
-FROM event_details 
-WHERE event_id = ANY($1)
+SELECT id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id, tickets_remaining FROM event_details WHERE event_id = ANY($1)
 `
 
 func (q *Queries) GetEventDetailsByEventId(ctx context.Context, eventID []uuid.UUID) ([]EventDetail, error) {
@@ -89,6 +90,7 @@ func (q *Queries) GetEventDetailsByEventId(ctx context.Context, eventID []uuid.U
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.EventID,
+			&i.TicketsRemaining,
 		); err != nil {
 			return nil, err
 		}
@@ -103,11 +105,32 @@ func (q *Queries) GetEventDetailsByEventId(ctx context.Context, eventID []uuid.U
 	return items, nil
 }
 
+const getEventDetailsById = `-- name: GetEventDetailsById :one
+SELECT id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id, tickets_remaining FROM event_details WHERE id = $1
+`
+
+func (q *Queries) GetEventDetailsById(ctx context.Context, id uuid.UUID) (EventDetail, error) {
+	row := q.db.QueryRowContext(ctx, getEventDetailsById, id)
+	var i EventDetail
+	err := row.Scan(
+		&i.ID,
+		&i.ShowDate,
+		&i.Price,
+		&i.NumberOfTickets,
+		&i.TicketDescription,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EventID,
+		&i.TicketsRemaining,
+	)
+	return i, err
+}
+
 const updateEventDetail = `-- name: UpdateEventDetail :one
 UPDATE event_details
 SET show_date = $1, price = $2, number_of_tickets = $3, ticket_description = $4, updated_at = NOW()
 WHERE id = $5 AND event_id = $6
-RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id
+RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id, tickets_remaining
 `
 
 type UpdateEventDetailParams struct {
@@ -138,6 +161,36 @@ func (q *Queries) UpdateEventDetail(ctx context.Context, arg UpdateEventDetailPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.TicketsRemaining,
+	)
+	return i, err
+}
+
+const updateTicketsRemaining = `-- name: UpdateTicketsRemaining :one
+UPDATE event_details
+SET tickets_remaining = $1, updated_at = NOW()
+WHERE id = $2
+RETURNING id, show_date, price, number_of_tickets, ticket_description, created_at, updated_at, event_id, tickets_remaining
+`
+
+type UpdateTicketsRemainingParams struct {
+	TicketsRemaining int32
+	ID               uuid.UUID
+}
+
+func (q *Queries) UpdateTicketsRemaining(ctx context.Context, arg UpdateTicketsRemainingParams) (EventDetail, error) {
+	row := q.db.QueryRowContext(ctx, updateTicketsRemaining, arg.TicketsRemaining, arg.ID)
+	var i EventDetail
+	err := row.Scan(
+		&i.ID,
+		&i.ShowDate,
+		&i.Price,
+		&i.NumberOfTickets,
+		&i.TicketDescription,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EventID,
+		&i.TicketsRemaining,
 	)
 	return i, err
 }

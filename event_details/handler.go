@@ -11,6 +11,7 @@ func DatabaseEventDetailToEventDetailJSON(databaseEventDetail database.EventDeta
 		ShowDate:          databaseEventDetail.ShowDate,
 		Price:             common.StringToFloat32(databaseEventDetail.Price),
 		NumberOfTickets:   databaseEventDetail.NumberOfTickets,
+		TicketsRemaining:  databaseEventDetail.TicketsRemaining,
 		TicketDescription: databaseEventDetail.TicketDescription,
 		CreatedAt:         databaseEventDetail.CreatedAt,
 		UpdatedAt:         common.NullTimeToString(databaseEventDetail.UpdatedAt),

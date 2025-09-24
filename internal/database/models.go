@@ -30,6 +30,7 @@ type EventDetail struct {
 	CreatedAt         time.Time
 	UpdatedAt         sql.NullTime
 	EventID           uuid.UUID
+	TicketsRemaining  int32
 }
 
 type Reservation struct {
