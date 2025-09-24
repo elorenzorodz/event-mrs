@@ -32,6 +32,14 @@ type EventDetail struct {
 	EventID           uuid.UUID
 }
 
+type Reservation struct {
+	ID            uuid.UUID
+	Email         string
+	CreatedAt     time.Time
+	UpdatedAt     sql.NullTime
+	EventDetailID uuid.UUID
+}
+
 type User struct {
 	ID        uuid.UUID
 	Firstname string
