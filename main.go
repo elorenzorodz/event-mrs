@@ -9,6 +9,7 @@ import (
 	"github.com/elorenzorodz/event-mrs/events"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/elorenzorodz/event-mrs/middleware"
+	"github.com/elorenzorodz/event-mrs/reservations"
 	"github.com/elorenzorodz/event-mrs/users"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -16,7 +17,6 @@ import (
 )
 
 func main() {
-	// TODO: Create new table to handle event reservations.
 	// TODO: Create new table to handle event reservation payments.
 	// TODO: Add Stripe payment integration for event reservations.
 	// TODO: Send email confirmation for payment and reservation.
@@ -73,6 +73,12 @@ func main() {
 	routerWithAuthorization.POST("/events/:eventId/details", eventDetailAPIConfig.CreateEventDetail)
 	routerWithAuthorization.PUT("/events/:eventId/details/:eventDetailId", eventDetailAPIConfig.UpdateEventDetail)
 	routerWithAuthorization.DELETE("/events/:eventId/details/:eventDetailId", eventDetailAPIConfig.DeleteEventDetail)
+
+	reservationAPIConfig := reservations.ReservationAPIConfig {
+		DB: database,
+	}
+
+	routerWithAuthorization.POST("/events/reserve", reservationAPIConfig.CreateReservation)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 

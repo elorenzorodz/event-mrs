@@ -38,6 +38,7 @@ func AuthorizationMiddleware(userAPIConfig *users.UserAPIConfig) gin.HandlerFunc
 		}
 
 		ginContext.Set("userId", getUser.ID)
+		ginContext.Set("email", getUser.Email)
 		ginContext.Next()
 	}
 }
