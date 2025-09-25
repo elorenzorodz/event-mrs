@@ -26,11 +26,11 @@ type EventDetail struct {
 	ShowDate          time.Time
 	Price             string
 	NumberOfTickets   int32
+	TicketsRemaining  int32
 	TicketDescription string
 	CreatedAt         time.Time
 	UpdatedAt         sql.NullTime
 	EventID           uuid.UUID
-	TicketsRemaining  int32
 }
 
 type Reservation struct {
@@ -39,6 +39,7 @@ type Reservation struct {
 	CreatedAt     time.Time
 	UpdatedAt     sql.NullTime
 	EventDetailID uuid.UUID
+	UserID        uuid.UUID
 }
 
 type User struct {
