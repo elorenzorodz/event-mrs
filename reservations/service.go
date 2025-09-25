@@ -97,3 +97,46 @@ func (reservationAPIConfig *ReservationAPIConfig) GetUserReservationById(ginCont
 
 	ginContext.JSON(http.StatusOK, gin.H{"reservation": DatabaseReservationToReservationJSON(userReservation)})
 }
+
+func (reservationAPIConfig *ReservationAPIConfig) UpdateReservationEmail(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	reservationId, parseReservationIdError := uuid.Parse(ginContext.Param("reservationId"))
+
+	if parseReservationIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid reservation ID"})
+
+		return
+	}
+
+	patchReservationParams := PatchReservationParameters{}
+
+	// Bind incoming JSON to struct and check for errors in the process.
+	if parameterBindError := ginContext.ShouldBindJSON(&patchReservationParams); parameterBindError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
+
+		return
+	}
+
+	updateUserReservationEmailParams := database.UpdateUserReservationEmailParams {
+		Email: patchReservationParams.Email,
+		ID: reservationId,
+		UserID: userId,
+	}
+
+	updatedUserReservation, updateReservationEmailError := reservationAPIConfig.DB.UpdateUserReservationEmail(ginContext.Request.Context(), updateUserReservationEmailParams)
+
+	if updateReservationEmailError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": updateReservationEmailError.Error()})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"reservation": DatabaseReservationToReservationJSON(updatedUserReservation)})
+}

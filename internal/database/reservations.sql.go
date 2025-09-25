@@ -118,3 +118,30 @@ func (q *Queries) ReserveTicket(ctx context.Context, arg ReserveTicketParams) (R
 	)
 	return i, err
 }
+
+const updateUserReservationEmail = `-- name: UpdateUserReservationEmail :one
+UPDATE reservations
+SET email = $1, updated_at = NOW()
+WHERE id = $2 AND user_id = $3
+RETURNING id, email, created_at, updated_at, event_detail_id, user_id
+`
+
+type UpdateUserReservationEmailParams struct {
+	Email  string
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) UpdateUserReservationEmail(ctx context.Context, arg UpdateUserReservationEmailParams) (Reservation, error) {
+	row := q.db.QueryRowContext(ctx, updateUserReservationEmail, arg.Email, arg.ID, arg.UserID)
+	var i Reservation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EventDetailID,
+		&i.UserID,
+	)
+	return i, err
+}

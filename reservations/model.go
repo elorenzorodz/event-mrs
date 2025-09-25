@@ -32,3 +32,7 @@ type EventDetailReservation struct {
 	Quantity      int       `json:"quantity" binding:"required"`
 	Email         string    `json:"email"`
 }
+
+type PatchReservationParameters struct {
+	Email string `json:"email" binding:"required"`
+}
