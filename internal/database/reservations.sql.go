@@ -11,6 +11,40 @@ import (
 	"github.com/google/uuid"
 )
 
+const getUserReservations = `-- name: GetUserReservations :many
+SELECT id, email, created_at, updated_at, event_detail_id, user_id FROM reservations WHERE user_id = $1
+`
+
+func (q *Queries) GetUserReservations(ctx context.Context, userID uuid.UUID) ([]Reservation, error) {
+	rows, err := q.db.QueryContext(ctx, getUserReservations, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Reservation
+	for rows.Next() {
+		var i Reservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EventDetailID,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reserveTicket = `-- name: ReserveTicket :one
 WITH params AS (
     SELECT 

@@ -78,6 +78,7 @@ func main() {
 		DB: database,
 	}
 
+	routerWithAuthorization.GET("/reservations", reservationAPIConfig.GetUserReservations)
 	routerWithAuthorization.POST("/reservations", reservationAPIConfig.CreateReservation)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)

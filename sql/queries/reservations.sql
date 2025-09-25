@@ -22,5 +22,5 @@ FROM params p
 CROSS JOIN updated_event_detail u 
 RETURNING id AS id, email AS email, created_at AS created_at, updated_at AS updated_at, event_detail_id AS event_detail_id, user_id AS user_id;
 
--- GetTickets :many
+-- name: GetUserReservations :many
 SELECT * FROM reservations WHERE user_id = $1;

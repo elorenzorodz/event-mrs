@@ -43,3 +43,23 @@ func (reservationAPIConfig *ReservationAPIConfig) CreateReservation(ginContext *
 
 	ginContext.JSON(http.StatusCreated, gin.H{"events_reserved": newReservations})
 }
+
+func (reservationAPIConfig *ReservationAPIConfig) GetUserReservations(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	userReservations, getUserReservationsError := reservationAPIConfig.DB.GetUserReservations(ginContext.Request.Context(), userId)
+
+	if getUserReservationsError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": getUserReservationsError.Error()})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"reservations": DatabaseReservationsToReservationsJSON(userReservations)})
+}
