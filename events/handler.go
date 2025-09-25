@@ -89,6 +89,7 @@ func SaveEventTickets(db *database.Queries, context context.Context, eventId uui
 				ShowDate:         showDate,
 				Price:            fmt.Sprintf("%.2f", tkt.Price),
 				NumberOfTickets:  tkt.NumberOfTickets,
+				TicketsRemaining: tkt.NumberOfTickets,
 				TicketDescription: tkt.TicketDescription,
 				EventID:          eventId,
 			}

@@ -14,7 +14,7 @@ import (
 )
 
 const createEventDetail = `-- name: CreateEventDetail :one
-INSERT INTO event_details (id, show_date, price, number_of_tickets, ticket_description, tickets_remaining, event_id)
+INSERT INTO event_details (id, show_date, price, number_of_tickets, tickets_remaining, ticket_description, event_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, show_date, price, number_of_tickets, tickets_remaining, ticket_description, created_at, updated_at, event_id
 `
@@ -24,8 +24,8 @@ type CreateEventDetailParams struct {
 	ShowDate          time.Time
 	Price             string
 	NumberOfTickets   int32
-	TicketDescription string
 	TicketsRemaining  int32
+	TicketDescription string
 	EventID           uuid.UUID
 }
 
@@ -35,8 +35,8 @@ func (q *Queries) CreateEventDetail(ctx context.Context, arg CreateEventDetailPa
 		arg.ShowDate,
 		arg.Price,
 		arg.NumberOfTickets,
-		arg.TicketDescription,
 		arg.TicketsRemaining,
+		arg.TicketDescription,
 		arg.EventID,
 	)
 	var i EventDetail
