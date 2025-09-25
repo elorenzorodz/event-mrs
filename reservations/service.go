@@ -36,7 +36,7 @@ func (reservationAPIConfig *ReservationAPIConfig) CreateReservation(ginContext *
 	newReservations, createTicketsError := SaveReservations(reservationAPIConfig.DB, ginContext.Request.Context(), userId, userEmail, reservationParams)
 
 	if createTicketsError != nil {
-		ginContext.JSON(http.StatusMultiStatus, gin.H{"events_reserved": newReservations, "error": "error creating to some reservations, please reserve separately the failed reservations"})
+		ginContext.JSON(http.StatusMultiStatus, gin.H{"events_reserved": newReservations, "error": createTicketsError.Error()})
 
 		return
 	}

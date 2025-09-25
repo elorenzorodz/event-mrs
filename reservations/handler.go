@@ -3,6 +3,7 @@ package reservations
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -18,6 +19,7 @@ func DatabaseReservationToReservationJSON(databaseReservation database.Reservati
 		CreatedAt:     databaseReservation.CreatedAt,
 		UpdatedAt:     common.NullTimeToString(databaseReservation.UpdatedAt),
 		EventDetailID: databaseReservation.EventDetailID,
+		UserID:        databaseReservation.UserID,
 	}
 }
 
@@ -59,6 +61,8 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 
 					return
 				}
+
+				log.Println(eventDetail.TicketsRemaining)
 
 				if eventDetail.TicketsRemaining < 1 {
 					errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
