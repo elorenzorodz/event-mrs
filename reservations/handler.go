@@ -31,7 +31,7 @@ func DatabaseReservationsToReservationsJSON(databaseReservations []database.Rese
 	return reservations
 }
 
-func SaveReservations(db *database.Queries, context context.Context, userEmail string, reservations ReservationParameters) ([]Reservation, error) {
+func SaveReservations(db *database.Queries, context context.Context, userId uuid.UUID, userEmail string, reservations ReservationParameters) ([]Reservation, error) {
 	var (
 		newReservations []Reservation
 		mutex           sync.Mutex
@@ -42,6 +42,12 @@ func SaveReservations(db *database.Queries, context context.Context, userEmail s
 	for _, eventDetailReservation := range reservations.EventDetailReservations {
 		// Capture loop variable
 		edReservation := eventDetailReservation
+
+		emailReservation := edReservation.Email
+
+		if strings.TrimSpace(emailReservation) == "" {
+			emailReservation = userEmail
+		}
 
 		for x := 0; x < edReservation.Quantity; x++ {
 			waitGroup.Go(func() {
@@ -63,7 +69,8 @@ func SaveReservations(db *database.Queries, context context.Context, userEmail s
 				reserveTicketParams := database.ReserveTicketParams{
 					Column1: edReservation.EventDetailID,
 					Column2: uuid.New(),
-					Column3: userEmail,
+					Column3: emailReservation,
+					Column4: userId,
 				}
 
 				newReservation, reserveTicketError := db.ReserveTicket(context, reserveTicketParams)

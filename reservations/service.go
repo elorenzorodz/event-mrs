@@ -5,9 +5,18 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func (reservationAPIConfig *ReservationAPIConfig) CreateReservation(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
 	reservationParams := ReservationParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
@@ -24,8 +33,7 @@ func (reservationAPIConfig *ReservationAPIConfig) CreateReservation(ginContext *
 		userEmail = ginContext.MustGet("email").(string)
 	}
 
-	// Save ticket details.
-	newReservations, createTicketsError := SaveReservations(reservationAPIConfig.DB, ginContext.Request.Context(), userEmail, reservationParams)
+	newReservations, createTicketsError := SaveReservations(reservationAPIConfig.DB, ginContext.Request.Context(), userId, userEmail, reservationParams)
 
 	if createTicketsError != nil {
 		ginContext.JSON(http.StatusMultiStatus, gin.H{"events_reserved": newReservations, "error": "error creating to some reservations, please reserve separately the failed reservations"})

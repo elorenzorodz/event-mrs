@@ -17,14 +17,18 @@ type Reservation struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     string    `json:"updated_at"`
 	EventDetailID uuid.UUID `json:"event_detail_id"`
+	UserID        uuid.UUID `json:"user_id"`
 }
 
+// Note: If email isn't provided here, try to get from current user.
 type ReservationParameters struct {
 	Email                   string                   `json:"email"`
 	EventDetailReservations []EventDetailReservation `json:"event_detail_reservations" binding:"required"`
 }
 
+// Note: If email isn't provided here, try to get from ReservationParameters.
 type EventDetailReservation struct {
 	EventDetailID uuid.UUID `json:"event_detail_id" binding:"required"`
-	Quantity      int     	`json:"quantity" binding:"required"`
+	Quantity      int       `json:"quantity" binding:"required"`
+	Email         string    `json:"email"`
 }
