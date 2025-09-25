@@ -24,3 +24,6 @@ RETURNING id AS id, email AS email, created_at AS created_at, updated_at AS upda
 
 -- name: GetUserReservations :many
 SELECT * FROM reservations WHERE user_id = $1;
+
+-- name: GetUserReservationById :one
+SELECT * FROM reservations WHERE id = $1 AND user_id = $2;

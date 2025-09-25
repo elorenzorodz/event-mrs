@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -62,4 +63,37 @@ func (reservationAPIConfig *ReservationAPIConfig) GetUserReservations(ginContext
 	}
 
 	ginContext.JSON(http.StatusOK, gin.H{"reservations": DatabaseReservationsToReservationsJSON(userReservations)})
+}
+
+func (reservationAPIConfig *ReservationAPIConfig) GetUserReservationById(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	reservationId, parseReservationIdError := uuid.Parse(ginContext.Param("reservationId"))
+
+	if parseReservationIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid reservation ID"})
+
+		return
+	}
+
+	getUserReservationByIdParams := database.GetUserReservationByIdParams {
+		ID: reservationId,
+		UserID: userId,
+	}
+
+	userReservation, getUserReservationByIdError := reservationAPIConfig.DB.GetUserReservationById(ginContext.Request.Context(), getUserReservationByIdParams)
+
+	if getUserReservationByIdError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": getUserReservationByIdError.Error()})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"reservation": DatabaseReservationToReservationJSON(userReservation)})
 }

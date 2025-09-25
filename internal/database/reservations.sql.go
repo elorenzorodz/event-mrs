@@ -11,6 +11,29 @@ import (
 	"github.com/google/uuid"
 )
 
+const getUserReservationById = `-- name: GetUserReservationById :one
+SELECT id, email, created_at, updated_at, event_detail_id, user_id FROM reservations WHERE id = $1 AND user_id = $2
+`
+
+type GetUserReservationByIdParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetUserReservationById(ctx context.Context, arg GetUserReservationByIdParams) (Reservation, error) {
+	row := q.db.QueryRowContext(ctx, getUserReservationById, arg.ID, arg.UserID)
+	var i Reservation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EventDetailID,
+		&i.UserID,
+	)
+	return i, err
+}
+
 const getUserReservations = `-- name: GetUserReservations :many
 SELECT id, email, created_at, updated_at, event_detail_id, user_id FROM reservations WHERE user_id = $1
 `
