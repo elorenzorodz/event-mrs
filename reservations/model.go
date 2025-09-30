@@ -24,6 +24,7 @@ type Reservation struct {
 // Note: If email isn't provided here, try to get from current user.
 type ReservationParameters struct {
 	Email                   string                   `json:"email"`
+	Currency				string					 `json:"currency"`
 	EventDetailReservations []EventDetailReservation `json:"event_detail_reservations" binding:"required"`
 }
 
