@@ -51,3 +51,35 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 	)
 	return i, err
 }
+
+const updatePayment = `-- name: UpdatePayment :one
+UPDATE payments
+SET amount = $1, status = $2, updated_at = NOW()
+RETURNING id, amount, currency, status, user_id
+`
+
+type UpdatePaymentParams struct {
+	Amount string
+	Status string
+}
+
+type UpdatePaymentRow struct {
+	ID       uuid.UUID
+	Amount   string
+	Currency string
+	Status   string
+	UserID   uuid.UUID
+}
+
+func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (UpdatePaymentRow, error) {
+	row := q.db.QueryRowContext(ctx, updatePayment, arg.Amount, arg.Status)
+	var i UpdatePaymentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.Currency,
+		&i.Status,
+		&i.UserID,
+	)
+	return i, err
+}
