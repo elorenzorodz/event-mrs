@@ -18,6 +18,7 @@ type Reservation struct {
 	UpdatedAt     string    `json:"updated_at"`
 	EventDetailID uuid.UUID `json:"event_detail_id"`
 	UserID        uuid.UUID `json:"user_id"`
+	PaymentID     uuid.UUID `json:"payment_id"`
 }
 
 // Note: If email isn't provided here, try to get from current user.

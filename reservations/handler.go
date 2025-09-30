@@ -19,6 +19,7 @@ func DatabaseReservationToReservationJSON(databaseReservation database.Reservati
 		UpdatedAt:     common.NullTimeToString(databaseReservation.UpdatedAt),
 		EventDetailID: databaseReservation.EventDetailID,
 		UserID:        databaseReservation.UserID,
+		PaymentID:     databaseReservation.PaymentID,
 	}
 }
 
@@ -67,11 +68,14 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 					return
 				}
 
+				// TODO: Process payment here.
+
 				reserveTicketParams := database.ReserveTicketParams{
 					Column1: edReservation.EventDetailID,
 					Column2: uuid.New(),
 					Column3: emailReservation,
 					Column4: userId,
+
 				}
 
 				newReservation, reserveTicketError := db.ReserveTicket(context, reserveTicketParams)

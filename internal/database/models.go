@@ -33,6 +33,16 @@ type EventDetail struct {
 	EventID           uuid.UUID
 }
 
+type Payment struct {
+	ID        uuid.UUID
+	Amount    string
+	Currency  string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+	UserID    uuid.UUID
+}
+
 type Reservation struct {
 	ID            uuid.UUID
 	Email         string
@@ -40,6 +50,7 @@ type Reservation struct {
 	UpdatedAt     sql.NullTime
 	EventDetailID uuid.UUID
 	UserID        uuid.UUID
+	PaymentID     uuid.UUID
 }
 
 type User struct {

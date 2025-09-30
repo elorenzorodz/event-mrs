@@ -12,7 +12,7 @@ import (
 )
 
 const getUserReservationById = `-- name: GetUserReservationById :one
-SELECT id, email, created_at, updated_at, event_detail_id, user_id FROM reservations WHERE id = $1 AND user_id = $2
+SELECT id, email, created_at, updated_at, event_detail_id, user_id, payment_id FROM reservations WHERE id = $1 AND user_id = $2
 `
 
 type GetUserReservationByIdParams struct {
@@ -30,12 +30,13 @@ func (q *Queries) GetUserReservationById(ctx context.Context, arg GetUserReserva
 		&i.UpdatedAt,
 		&i.EventDetailID,
 		&i.UserID,
+		&i.PaymentID,
 	)
 	return i, err
 }
 
 const getUserReservations = `-- name: GetUserReservations :many
-SELECT id, email, created_at, updated_at, event_detail_id, user_id FROM reservations WHERE user_id = $1
+SELECT id, email, created_at, updated_at, event_detail_id, user_id, payment_id FROM reservations WHERE user_id = $1
 `
 
 func (q *Queries) GetUserReservations(ctx context.Context, userID uuid.UUID) ([]Reservation, error) {
@@ -54,6 +55,7 @@ func (q *Queries) GetUserReservations(ctx context.Context, userID uuid.UUID) ([]
 			&i.UpdatedAt,
 			&i.EventDetailID,
 			&i.UserID,
+			&i.PaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -74,7 +76,8 @@ WITH params AS (
         $1::uuid AS event_detail_id, 
         $2::uuid AS reservation_id, 
         $3::text AS email,
-        $4::uuid AS user_id), 
+        $4::uuid AS user_id,
+        $5::uuid AS payment_id), 
 updated_event_detail AS ( 
     UPDATE event_details ed 
     SET tickets_remaining = ed.tickets_remaining - 1 
@@ -82,15 +85,16 @@ updated_event_detail AS (
     WHERE ed.id = p.event_detail_id AND ed.tickets_remaining > 0 
     RETURNING ed.id AS event_detail_id ) 
 
-INSERT INTO reservations (id, email, event_detail_id, user_id) 
+INSERT INTO reservations (id, email, event_detail_id, user_id, payment_id) 
 SELECT 
     p.reservation_id AS id, 
     p.email AS email, 
     u.event_detail_id,
-    p.user_id AS user_id
+    p.user_id AS user_id,
+    p.payment_id AS payment_id
 FROM params p 
 CROSS JOIN updated_event_detail u 
-RETURNING id AS id, email AS email, created_at AS created_at, updated_at AS updated_at, event_detail_id AS event_detail_id, user_id AS user_id
+RETURNING id AS id, email AS email, created_at AS created_at, updated_at AS updated_at, event_detail_id AS event_detail_id, user_id AS user_id, payment_id AS payment_id
 `
 
 type ReserveTicketParams struct {
@@ -98,6 +102,7 @@ type ReserveTicketParams struct {
 	Column2 uuid.UUID
 	Column3 string
 	Column4 uuid.UUID
+	Column5 uuid.UUID
 }
 
 func (q *Queries) ReserveTicket(ctx context.Context, arg ReserveTicketParams) (Reservation, error) {
@@ -106,6 +111,7 @@ func (q *Queries) ReserveTicket(ctx context.Context, arg ReserveTicketParams) (R
 		arg.Column2,
 		arg.Column3,
 		arg.Column4,
+		arg.Column5,
 	)
 	var i Reservation
 	err := row.Scan(
@@ -115,6 +121,7 @@ func (q *Queries) ReserveTicket(ctx context.Context, arg ReserveTicketParams) (R
 		&i.UpdatedAt,
 		&i.EventDetailID,
 		&i.UserID,
+		&i.PaymentID,
 	)
 	return i, err
 }
@@ -123,7 +130,7 @@ const updateUserReservationEmail = `-- name: UpdateUserReservationEmail :one
 UPDATE reservations
 SET email = $1, updated_at = NOW()
 WHERE id = $2 AND user_id = $3
-RETURNING id, email, created_at, updated_at, event_detail_id, user_id
+RETURNING id, email, created_at, updated_at, event_detail_id, user_id, payment_id
 `
 
 type UpdateUserReservationEmailParams struct {
@@ -142,6 +149,7 @@ func (q *Queries) UpdateUserReservationEmail(ctx context.Context, arg UpdateUser
 		&i.UpdatedAt,
 		&i.EventDetailID,
 		&i.UserID,
+		&i.PaymentID,
 	)
 	return i, err
 }
