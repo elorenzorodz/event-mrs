@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
@@ -43,6 +44,7 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 		errorChannel    = make(chan error, len(reservations.EventDetailReservations))
 	)
 
+	currentDateTime := time.Now()
 	currency := reservations.Currency
 
 	if strings.TrimSpace(currency) == "" {
@@ -81,6 +83,12 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 
 				if getEventDetailByIdError != nil {
 					errorChannel <- fmt.Errorf("error checking event detail tickets remaining: %w", getEventDetailByIdError)
+
+					return
+				}
+
+				if currentDateTime.After(eventDetail.ShowDate) {
+					errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
 
 					return
 				}
