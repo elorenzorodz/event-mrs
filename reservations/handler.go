@@ -78,7 +78,7 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 
 		for x := 0; x < edReservation.Quantity; x++ {
 			waitGroup.Go(func() {
-				// Do not proceed if remaining tickets is already zero.
+				// Get event details for additional checking.
 				eventDetail, getEventDetailByIdError := db.GetEventDetailsById(context, edReservation.EventDetailID)
 
 				if getEventDetailByIdError != nil {
@@ -87,12 +87,14 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 					return
 				}
 
+				// Event already started or over.
 				if currentDateTime.After(eventDetail.ShowDate) {
 					errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
 
 					return
 				}
 
+				// Remaining tickets is already zero.
 				if eventDetail.TicketsRemaining < 1 {
 					errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
 
@@ -101,6 +103,7 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 
 				price, priceParseError := strconv.ParseFloat(eventDetail.Price, 64)
 
+				// Cannot process the price.
 				if priceParseError != nil {
 					errorChannel <- fmt.Errorf("error processing price of ticket %s, price: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.Price, eventDetail.ShowDate)
 
