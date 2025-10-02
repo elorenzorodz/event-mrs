@@ -142,7 +142,7 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 		stripeTotalAmount, totalAmountParseError := strconv.ParseInt(strings.ReplaceAll(totalAmountString, ".", ""), 10, 64)
 		
 		if totalAmountParseError != nil {
-			errorChannel <- fmt.Errorf("failed to process payment: %w", totalAmountParseError.Error())
+			errorChannel <- fmt.Errorf("failed to process payment: %w", totalAmountParseError)
 
 			return
 		}
