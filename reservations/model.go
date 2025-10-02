@@ -25,6 +25,7 @@ type Reservation struct {
 type ReservationParameters struct {
 	Email                   string                   `json:"email"`
 	Currency				string					 `json:"currency"`
+	PaymentMethodId			string					 `json:"payment_method_id"`
 	EventDetailReservations []EventDetailReservation `json:"event_detail_reservations" binding:"required"`
 }
 
