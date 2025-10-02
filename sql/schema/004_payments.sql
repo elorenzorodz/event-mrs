@@ -2,6 +2,7 @@
 
 CREATE TABLE payments (
     id UUID PRIMARY KEY,
+    payment_intent_id TEXT NOT NULL,
     amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
 	currency TEXT NOT NULL,
     status TEXT NOT NULL,
