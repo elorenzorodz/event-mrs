@@ -11,6 +11,8 @@ import (
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v83"
+	"github.com/stripe/stripe-go/v83/paymentintent"
 )
 
 func DatabaseReservationToReservationJSON(databaseReservation database.Reservation) Reservation {
@@ -136,11 +138,36 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 	}
 
 	waitGroup.Go(func() {
-		// TODO: Process Stripe payment here.
+		totalAmountString := strconv.FormatFloat(totalAmount, 'f', -1, 64)
+		stripeTotalAmount, totalAmountParseError := strconv.ParseInt(strings.ReplaceAll(totalAmountString, ".", ""), 10, 64)
+		
+		if totalAmountParseError != nil {
+			errorChannel <- fmt.Errorf("failed to process payment: %w", totalAmountParseError.Error())
+
+			return
+		}
+
+		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
+		confirmed := true
+
+		paymentIntentParams := &stripe.PaymentIntentParams{
+			Amount: &stripeTotalAmount,
+			Currency: &newPayment.Currency,
+			Confirm: &confirmed,
+			PaymentMethod: &reservations.PaymentMethodId,
+		}
+
+		newPaymentIntentResult, createPaymentIntentError := paymentintent.New(paymentIntentParams)
+
+		if createPaymentIntentError != nil {
+			errorChannel <- fmt.Errorf("failed to process payment: %w", createPaymentIntentError)
+
+			return
+		}
 
 		updatePaymentParams := database.UpdatePaymentParams {
-			Amount: strconv.FormatFloat(totalAmount, 'f', -1, 64),
-			Status: "",
+			Amount: totalAmountString,
+			Status: string(newPaymentIntentResult.Status),
 		}
 
 		_, updatePaymentError := db.UpdatePayment(context, updatePaymentParams)
