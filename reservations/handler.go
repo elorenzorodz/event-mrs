@@ -138,36 +138,44 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 	}
 
 	waitGroup.Go(func() {
-		totalAmountString := strconv.FormatFloat(totalAmount, 'f', -1, 64)
-		stripeTotalAmount, totalAmountParseError := strconv.ParseInt(strings.ReplaceAll(totalAmountString, ".", ""), 10, 64)
-		
-		if totalAmountParseError != nil {
-			errorChannel <- fmt.Errorf("failed to process payment: %w", totalAmountParseError)
+		var totalAmountString string
+		paymentStatus := "succeeded"
 
-			return
-		}
+		// Tickets reserved are free.
+		if totalAmount > 0 {
+			totalAmountString = strconv.FormatFloat(totalAmount, 'f', -1, 64)
+			stripeTotalAmount, totalAmountParseError := strconv.ParseInt(strings.ReplaceAll(totalAmountString, ".", ""), 10, 64)
+			
+			if totalAmountParseError != nil {
+				errorChannel <- fmt.Errorf("failed to process payment: %w", totalAmountParseError)
 
-		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
-		confirmed := true
+				return
+			}
 
-		paymentIntentParams := &stripe.PaymentIntentParams{
-			Amount: &stripeTotalAmount,
-			Currency: &newPayment.Currency,
-			Confirm: &confirmed,
-			PaymentMethod: &reservations.PaymentMethodId,
-		}
+			stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
+			confirmed := true
 
-		newPaymentIntentResult, createPaymentIntentError := paymentintent.New(paymentIntentParams)
+			paymentIntentParams := &stripe.PaymentIntentParams{
+				Amount: &stripeTotalAmount,
+				Currency: &newPayment.Currency,
+				Confirm: &confirmed,
+				PaymentMethod: &reservations.PaymentMethodId,
+			}
 
-		if createPaymentIntentError != nil {
-			errorChannel <- fmt.Errorf("failed to process payment: %w", createPaymentIntentError)
+			newPaymentIntentResult, createPaymentIntentError := paymentintent.New(paymentIntentParams)
 
-			return
+			if createPaymentIntentError != nil {
+				errorChannel <- fmt.Errorf("failed to process payment: %w", createPaymentIntentError)
+
+				return
+			}
+
+			paymentStatus = string(newPaymentIntentResult.Status)
 		}
 
 		updatePaymentParams := database.UpdatePaymentParams {
 			Amount: totalAmountString,
-			Status: string(newPaymentIntentResult.Status),
+			Status: paymentStatus,
 		}
 
 		_, updatePaymentError := db.UpdatePayment(context, updatePaymentParams)
