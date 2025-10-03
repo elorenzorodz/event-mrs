@@ -249,7 +249,6 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 	}
 	
 	if paymentStatus != "succeeded" {
-		// TODO: Handle other status.
 		switch paymentStatus {
 			case string(stripe.PaymentIntentStatusRequiresAction):
 				paymentMessages = append(paymentMessages, fmt.Sprintf("complete payment within next 15 minutes, next_action: %s", paymentNextAction))
