@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -52,33 +53,48 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 	return i, err
 }
 
-const deletePayment = `-- name: DeletePayment :exec
+const restoreTicketsAndDeletePayment = `-- name: RestoreTicketsAndDeletePayment :exec
+WITH counts AS (
+  SELECT event_detail_id, COUNT(*) AS cnt
+  FROM reservations
+  WHERE payment_id = $1::uuid
+  GROUP BY event_detail_id
+),
+updated AS (
+  -- add back reserved tickets
+  UPDATE event_details ed
+  SET tickets_remaining = ed.tickets_remaining + c.cnt
+  FROM counts c
+  WHERE ed.id = c.event_detail_id
+  RETURNING ed.id
+)
 DELETE FROM payments
-WHERE id = $1 AND user_id = $2
+WHERE id = $1::uuid AND user_id = $2::uuid
 `
 
-type DeletePaymentParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+type RestoreTicketsAndDeletePaymentParams struct {
+	PaymentID uuid.UUID
+	UserID    uuid.UUID
 }
 
-func (q *Queries) DeletePayment(ctx context.Context, arg DeletePaymentParams) error {
-	_, err := q.db.ExecContext(ctx, deletePayment, arg.ID, arg.UserID)
+func (q *Queries) RestoreTicketsAndDeletePayment(ctx context.Context, arg RestoreTicketsAndDeletePaymentParams) error {
+	_, err := q.db.ExecContext(ctx, restoreTicketsAndDeletePayment, arg.PaymentID, arg.UserID)
 	return err
 }
 
 const updatePayment = `-- name: UpdatePayment :one
 UPDATE payments
-SET amount = $1, status = $2, updated_at = NOW()
-WHERE id = $3 AND user_id = $4
+SET amount = $1, status = $2, updated_at = NOW(), payment_intent_id = $3
+WHERE id = $4 AND user_id = $5
 RETURNING id, amount, currency, status, user_id
 `
 
 type UpdatePaymentParams struct {
-	Amount string
-	Status string
-	ID     uuid.UUID
-	UserID uuid.UUID
+	Amount          string
+	Status          string
+	PaymentIntentID sql.NullString
+	ID              uuid.UUID
+	UserID          uuid.UUID
 }
 
 type UpdatePaymentRow struct {
@@ -93,6 +109,7 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (U
 	row := q.db.QueryRowContext(ctx, updatePayment,
 		arg.Amount,
 		arg.Status,
+		arg.PaymentIntentID,
 		arg.ID,
 		arg.UserID,
 	)

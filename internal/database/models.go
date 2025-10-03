@@ -35,7 +35,7 @@ type EventDetail struct {
 
 type Payment struct {
 	ID              uuid.UUID
-	PaymentIntentID string
+	PaymentIntentID sql.NullString
 	Amount          string
 	Currency        string
 	Status          string
