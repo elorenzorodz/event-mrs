@@ -1,7 +1,7 @@
 -- name: CreatePayment :one
 INSERT INTO payments (id, amount, currency, status, user_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, amount, currency, status, user_id;
+RETURNING id, payment_intent_id, amount, currency, status, created_at, updated_at, user_id;
 
 -- name: UpdatePayment :one
 UPDATE payments
@@ -26,3 +26,6 @@ updated AS (
 )
 DELETE FROM payments
 WHERE id = @payment_id::uuid AND user_id = @user_id::uuid;
+
+-- name: GetPaymentById :one
+SELECT * FROM payments WHERE id = $1 AND user_id = $2;

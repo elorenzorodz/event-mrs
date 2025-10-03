@@ -3,6 +3,7 @@ package common
 import (
 	"database/sql"
 	"log"
+	"math"
 	"strconv"
 	"time"
 )
@@ -42,4 +43,16 @@ func StringToFloat32(number string) float32 {
 	price32 := float32(price)
 
 	return price32
+}
+
+func PriceStringToCents(priceString string) (int64, error) {
+  centsFloat, parsePriceStringError := strconv.ParseFloat(priceString, 64)
+
+  if parsePriceStringError != nil {
+	log.Printf("error parsing price string to cents [%s]: %v", priceString, parsePriceStringError)
+
+    return 0, parsePriceStringError
+  }
+
+  return int64(math.Round(centsFloat * 100.0)), nil
 }

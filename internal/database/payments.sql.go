@@ -15,7 +15,7 @@ import (
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (id, amount, currency, status, user_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, amount, currency, status, user_id
+RETURNING id, payment_intent_id, amount, currency, status, created_at, updated_at, user_id
 `
 
 type CreatePaymentParams struct {
@@ -26,15 +26,7 @@ type CreatePaymentParams struct {
 	UserID   uuid.UUID
 }
 
-type CreatePaymentRow struct {
-	ID       uuid.UUID
-	Amount   string
-	Currency string
-	Status   string
-	UserID   uuid.UUID
-}
-
-func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error) {
+func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error) {
 	row := q.db.QueryRowContext(ctx, createPayment,
 		arg.ID,
 		arg.Amount,
@@ -42,12 +34,40 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 		arg.Status,
 		arg.UserID,
 	)
-	var i CreatePaymentRow
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.PaymentIntentID,
 		&i.Amount,
 		&i.Currency,
 		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getPaymentById = `-- name: GetPaymentById :one
+SELECT id, payment_intent_id, amount, currency, status, created_at, updated_at, user_id FROM payments WHERE id = $1 AND user_id = $2
+`
+
+type GetPaymentByIdParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetPaymentById(ctx context.Context, arg GetPaymentByIdParams) (Payment, error) {
+	row := q.db.QueryRowContext(ctx, getPaymentById, arg.ID, arg.UserID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentIntentID,
+		&i.Amount,
+		&i.Currency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 		&i.UserID,
 	)
 	return i, err
