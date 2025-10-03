@@ -52,15 +52,33 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 	return i, err
 }
 
+const deletePayment = `-- name: DeletePayment :exec
+DELETE FROM payments
+WHERE id = $1 AND user_id = $2
+`
+
+type DeletePaymentParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeletePayment(ctx context.Context, arg DeletePaymentParams) error {
+	_, err := q.db.ExecContext(ctx, deletePayment, arg.ID, arg.UserID)
+	return err
+}
+
 const updatePayment = `-- name: UpdatePayment :one
 UPDATE payments
 SET amount = $1, status = $2, updated_at = NOW()
+WHERE id = $3 AND user_id = $4
 RETURNING id, amount, currency, status, user_id
 `
 
 type UpdatePaymentParams struct {
 	Amount string
 	Status string
+	ID     uuid.UUID
+	UserID uuid.UUID
 }
 
 type UpdatePaymentRow struct {
@@ -72,7 +90,12 @@ type UpdatePaymentRow struct {
 }
 
 func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (UpdatePaymentRow, error) {
-	row := q.db.QueryRowContext(ctx, updatePayment, arg.Amount, arg.Status)
+	row := q.db.QueryRowContext(ctx, updatePayment,
+		arg.Amount,
+		arg.Status,
+		arg.ID,
+		arg.UserID,
+	)
 	var i UpdatePaymentRow
 	err := row.Scan(
 		&i.ID,

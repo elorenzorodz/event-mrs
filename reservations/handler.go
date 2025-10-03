@@ -141,8 +141,8 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 		var totalAmountString string
 		paymentStatus := "succeeded"
 
-		// Tickets reserved are free.
 		if totalAmount > 0 {
+			// Tickets reserved are free.
 			totalAmountString = strconv.FormatFloat(totalAmount, 'f', -1, 64)
 			stripeTotalAmount, totalAmountParseError := strconv.ParseInt(strings.ReplaceAll(totalAmountString, ".", ""), 10, 64)
 			
@@ -172,19 +172,38 @@ func SaveReservations(db *database.Queries, context context.Context, userId uuid
 
 			paymentStatus = string(newPaymentIntentResult.Status)
 		}
+		
+		if len(newReservations) == 0 {
+			// No tickets reserved.
+			deletePaymentParams := database.DeletePaymentParams {
+				ID: newPayment.ID,
+				UserID: userId,
+			}
 
-		updatePaymentParams := database.UpdatePaymentParams {
-			Amount: totalAmountString,
-			Status: paymentStatus,
+			deletePaymentError := db.DeletePayment(context, deletePaymentParams)
+
+			if deletePaymentError != nil {
+				errorChannel <- fmt.Errorf("failed to clean up payment record: %w", deletePaymentError)
+
+				return
+			}
+		} else {
+			updatePaymentParams := database.UpdatePaymentParams {
+				Amount: totalAmountString,
+				Status: paymentStatus,
+				ID: newPayment.ID,
+				UserID: userId,
+			}
+
+			_, updatePaymentError := db.UpdatePayment(context, updatePaymentParams)
+
+			if updatePaymentError != nil {
+				errorChannel <- fmt.Errorf("failed to update payment record: %w", updatePaymentError)
+
+				return
+			}
 		}
-
-		_, updatePaymentError := db.UpdatePayment(context, updatePaymentParams)
-
-		if updatePaymentError != nil {
-			errorChannel <- fmt.Errorf("failed to update payment record: %w", updatePaymentError)
-
-			return
-		}
+		
 	})
 
 	go func() {
