@@ -88,6 +88,7 @@ func main() {
 	}
 
 	routerAPIPrefix.POST("/payments/wh", paymentAPIConfig.ProcessStripePayment)
+	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
