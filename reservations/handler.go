@@ -64,6 +64,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	userPayment := payments.Payment{}
 	paymentId := reservations.PaymentID
+	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 	
 	if strings.TrimSpace(paymentId) != "" {
 		paymentuuid, parsePaymentIdError := uuid.Parse(paymentId)
@@ -81,6 +82,30 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		
 		if getPaymentByIdError != nil {
 			return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot get payment: %w", getPaymentByIdError)
+		}
+
+		currentDateTime := time.Now()
+
+		if currentPayment.ExpiresAt.After(currentDateTime) {
+			// User failed to process payment before expiration.
+			deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
+				PaymentID: currentPayment.ID,
+				UserID: userId,
+			}
+
+			deletePaymentError := db.RestoreTicketsAndDeletePayment(ctx, deletePaymentParams)
+
+			if deletePaymentError != nil {
+				return nil, payments.PaymentResponse{}, deletePaymentError
+			}
+
+			paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
+				CancellationReason: stripe.String("abandoned"),
+			}
+
+			paymentintent.Cancel(currentPayment.PaymentIntentID.String, paymentIntentCancelParams)
+
+			return nil, payments.PaymentResponse{}, fmt.Errorf("reservation expired, please rebook tickets again")
 		}
 
 		userPayment = payments.DatabasePaymentToPaymentJSON(currentPayment)
@@ -106,6 +131,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 			Currency: currency,
 			Status: "pending",
 			UserID: userId,
+			ExpiresAt: time.Now().Add(2 * time.Minute),
 		}
 
 		newPayment, createPaymentError := db.CreatePayment(ctx, createPaymentParams)
@@ -221,13 +247,13 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	paymentResponse := payments.PaymentResponse{
 		ID: userPayment.ID,
+		ExpiresAt: userPayment.ExpiresAt,
 	}
 
 	paymentIntentId := ""
 
 	if totalPrice > 0 {
 		// Tickets reserved are not free.
-		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 		var paymentIntentResult *stripe.PaymentIntent
 		var paymentIntentError error
 

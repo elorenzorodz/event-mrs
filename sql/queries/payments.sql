@@ -17,7 +17,6 @@ WITH counts AS (
   GROUP BY event_detail_id
 ),
 updated AS (
-  -- add back reserved tickets
   UPDATE event_details ed
   SET tickets_remaining = ed.tickets_remaining + c.cnt
   FROM counts c
@@ -25,7 +24,9 @@ updated AS (
   RETURNING ed.id
 )
 DELETE FROM payments
-WHERE id = @payment_id::uuid AND user_id = @user_id::uuid;
+WHERE id = @payment_id::uuid
+  AND user_id = @user_id::uuid
+  AND EXISTS (SELECT 1 FROM updated);
 
 -- name: GetPaymentById :one
 SELECT * FROM payments WHERE id = $1 AND user_id = $2;

@@ -86,7 +86,6 @@ WITH counts AS (
   GROUP BY event_detail_id
 ),
 updated AS (
-  -- add back reserved tickets
   UPDATE event_details ed
   SET tickets_remaining = ed.tickets_remaining + c.cnt
   FROM counts c
@@ -94,7 +93,9 @@ updated AS (
   RETURNING ed.id
 )
 DELETE FROM payments
-WHERE id = $1::uuid AND user_id = $2::uuid
+WHERE id = $1::uuid
+  AND user_id = $2::uuid
+  AND EXISTS (SELECT 1 FROM updated)
 `
 
 type RestoreTicketsAndDeletePaymentParams struct {
