@@ -221,7 +221,6 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	paymentResponse := payments.PaymentResponse{
 		ID: userPayment.ID,
-		Status: "succeeded",
 	}
 
 	paymentIntentId := ""
@@ -231,28 +230,38 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 		var paymentIntentResult *stripe.PaymentIntent
 		var paymentIntentError error
-		
-		paymentIntentParams := &stripe.PaymentIntentParams{
-			Amount: stripe.Int64(totalPrice),
-			Currency: stripe.String(strings.ToLower(userPayment.Currency)),
-			Confirm: stripe.Bool(true),
-			PaymentMethod: stripe.String(reservations.PaymentMethodID),
-			AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
-				Enabled: stripe.Bool(true),
-				AllowRedirects: stripe.String("never"),
-			},
-			Metadata: map[string]string{"payment_id": userPayment.ID.String()},
-		}
 
 		if strings.TrimSpace(userPayment.PaymentIntentID) == "" {
+			paymentIntentParams := &stripe.PaymentIntentParams{
+				Amount: stripe.Int64(totalPrice),
+				Currency: stripe.String(strings.ToLower(userPayment.Currency)),
+				Confirm: stripe.Bool(true),
+				PaymentMethod: stripe.String(reservations.PaymentMethodID),
+				AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+					Enabled: stripe.Bool(true),
+					AllowRedirects: stripe.String("never"),
+				},
+				Metadata: map[string]string{"payment_id": userPayment.ID.String()},
+			}
+
 			paymentIntentResult, paymentIntentError = paymentintent.New(paymentIntentParams)
 		} else {
-			paymentIntentResult, paymentIntentError = paymentintent.Update(userPayment.PaymentIntentID, paymentIntentParams)
+			paymentIntentConfirmParams := &stripe.PaymentIntentConfirmParams {
+				PaymentMethod: stripe.String(reservations.PaymentMethodID),
+			}
+
+			paymentIntentResult, paymentIntentError = paymentintent.Confirm(userPayment.PaymentIntentID, paymentIntentConfirmParams)
 		}
 
 		if paymentIntentError != nil {
-			paymentResponse.Status = "error"
-			paymentResponse.Message = paymentIntentError.Error()
+			if stripeErr, ok := paymentIntentError.(*stripe.Error); ok {
+				paymentResponse.Status = *stripe.String(stripeErr.Code)
+				paymentResponse.Message = *stripe.String(stripeErr.Msg)
+
+				if stripeErr.PaymentIntent != nil {
+					paymentIntentId = stripeErr.PaymentIntent.ID
+				}
+			}
 		} else {
 			if paymentIntentResult != nil {
 				paymentResponse.Status = string(paymentIntentResult.Status)
@@ -265,12 +274,14 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 					if paymentIntentResult.NextAction != nil {
 						paymentResponse.NextAction = string(paymentIntentResult.NextAction.Type)
 					}
+				} else if paymentResponse.Status != string(stripe.PaymentIntentStatusSucceeded) {
+					paymentResponse.Message = "please refer to next action and status"
 				}
 			}
 		}
 	}
 	
-	if paymentResponse.Status != "succeeded" {
+	if paymentResponse.Status != string(stripe.PaymentIntentStatusSucceeded) {
 		switch paymentResponse.Status {
 			case string(stripe.PaymentIntentStatusRequiresAction):
 				paymentResponse.Message = "complete payment within next 15 minutes"
@@ -296,11 +307,6 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 			case string(stripe.PaymentIntentStatusRequiresPaymentMethod):
 				paymentResponse.Message = "please submit new payment method"
-			
-			default:
-				if paymentResponse.Status != "error" {
-					paymentResponse.Message = "please refer to next action and status"
-				}
 		}
 	}
 
