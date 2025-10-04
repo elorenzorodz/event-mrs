@@ -12,7 +12,7 @@ func DatabasePaymentToPaymentJSON(databasePayment database.Payment) Payment {
 		Amount:          float64(common.StringToFloat32(databasePayment.Amount)),
 		Currency:        databasePayment.Currency,
 		Status:          databasePayment.Status,
-		ExpiresAt:       common.NullTimeToString(databasePayment.ExpiresAt),
+		ExpiresAt:       databasePayment.ExpiresAt,
 		CreatedAt:       databasePayment.CreatedAt,
 		UpdatedAt:       common.NullTimeToString(databasePayment.UpdatedAt),
 		UserID:          databasePayment.UserID,
