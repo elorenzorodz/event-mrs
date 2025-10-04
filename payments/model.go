@@ -40,7 +40,7 @@ type StripePayloadParameters struct {
 		Object struct {
 			ID              string `json:"id"`
 			Object          string `json:"object"`
-			Amount          int64 `json:"amount"`
+			Amount          int64  `json:"amount"`
 			Currency        string `json:"currency"`
 			Status          string `json:"status"`
 			PaymentMethodID string `json:"payment_method"`
@@ -50,4 +50,8 @@ type StripePayloadParameters struct {
 		} `json:"object"`
 	} `json:"data"`
 	Type string `json:"type"`
+}
+
+type PaymentParameters struct {
+	PaymentMethodID string `json:"payment_method_id"`
 }

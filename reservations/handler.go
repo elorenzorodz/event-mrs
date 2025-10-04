@@ -63,169 +63,104 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 	}
 
 	userPayment := payments.Payment{}
-	paymentId := reservations.PaymentID
-	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
-	
-	if strings.TrimSpace(paymentId) != "" {
-		paymentuuid, parsePaymentIdError := uuid.Parse(paymentId)
 
-		if parsePaymentIdError != nil {
-			return newReservations, payments.PaymentResponse{}, fmt.Errorf("invalid payment id")
-		}
-
-		getPaymentByIdParams := database.GetPaymentByIdParams {
-			ID: paymentuuid,
-			UserID: userId,
-		}
-
-		currentPayment, getPaymentByIdError := db.GetPaymentById(ctx, getPaymentByIdParams)
-		
-		if getPaymentByIdError != nil {
-			return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot get payment: %w", getPaymentByIdError)
-		}
-
-		currentDateTime := time.Now()
-
-		if currentPayment.ExpiresAt.After(currentDateTime) {
-			// User failed to process payment before expiration.
-			deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
-				PaymentID: currentPayment.ID,
-				UserID: userId,
-			}
-
-			deletePaymentError := db.RestoreTicketsAndDeletePayment(ctx, deletePaymentParams)
-
-			if deletePaymentError != nil {
-				return nil, payments.PaymentResponse{}, deletePaymentError
-			}
-
-			paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
-				CancellationReason: stripe.String("abandoned"),
-			}
-
-			paymentintent.Cancel(currentPayment.PaymentIntentID.String, paymentIntentCancelParams)
-
-			return nil, payments.PaymentResponse{}, fmt.Errorf("reservation expired, please rebook tickets again")
-		}
-
-		userPayment = payments.DatabasePaymentToPaymentJSON(currentPayment)
-		totalPrice = int64(userPayment.Amount)
-
-		userReservationsByPaymentIdParams := database.GetUserReservationsByPaymentIdParams {
-			UserID: userId,
-			PaymentID: userPayment.ID,
-		}
-
-		userReservations, getUserReservationsByPaymentIdError := db.GetUserReservationsByPaymentId(ctx, userReservationsByPaymentIdParams)
-
-		if getUserReservationsByPaymentIdError != nil {
-			return nil, payments.PaymentResponse{}, fmt.Errorf("cannot get reservations, please try again in a few minutes")
-		}
-
-		newReservations = DatabaseReservationsToReservationsJSON(userReservations)
-	} else {
-		// Create initial payment and default amount to zero first.
-		createPaymentParams := database.CreatePaymentParams {
-			ID: uuid.New(),
-			Amount: "0.00",
-			Currency: currency,
-			Status: "pending",
-			UserID: userId,
-			ExpiresAt: time.Now().Add(2 * time.Minute),
-		}
-
-		newPayment, createPaymentError := db.CreatePayment(ctx, createPaymentParams)
-
-		if createPaymentError != nil {
-			return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot process payment")
-		}
-
-		userPayment = payments.DatabasePaymentToPaymentJSON(newPayment)
+	// Create initial payment and default amount to zero first.
+	createPaymentParams := database.CreatePaymentParams {
+		ID: uuid.New(),
+		Amount: "0.00",
+		Currency: currency,
+		Status: "pending",
+		UserID: userId,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}
-	
+
+	newPayment, createPaymentError := db.CreatePayment(ctx, createPaymentParams)
+
+	if createPaymentError != nil {
+		return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot process ticket reservation, please try again in a few minutes")
+	}
+
+	userPayment = payments.DatabasePaymentToPaymentJSON(newPayment)
+
+	for _, eventDetailReservation := range reservations.EventDetailReservations {
+		// Capture loop variable
+		edReservation := eventDetailReservation
+		emailReservation := edReservation.Email
+
+		if strings.TrimSpace(emailReservation) == "" {
+			emailReservation = userEmail
+		}
+
+		for x := 0; x < edReservation.Quantity; x++ {
+			waitGroup.Go(func(edRsrvtion EventDetailReservation, emailForReservation string) func () {
+				return func() {
+					// Get event details for additional checking.
+					eventDetail, getEventDetailByIdError := db.GetEventDetailsById(ctx, edRsrvtion.EventDetailID)
+
+					if getEventDetailByIdError != nil {
+						errorChannel <- fmt.Errorf("error checking event detail tickets remaining: %w", getEventDetailByIdError)
+
+						return
+					}
+
+					currentDateTime := time.Now()
+
+					// Event already started or over.
+					if currentDateTime.After(eventDetail.ShowDate) {
+						errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
+
+						return
+					}
+
+					// Remaining tickets is already zero.
+					if eventDetail.TicketsRemaining < 1 {
+						errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
+
+						return
+					}
+
+					price, priceParseError := common.PriceStringToCents(eventDetail.Price)
+
+					// Cannot process the price.
+					if priceParseError != nil {
+						errorChannel <- fmt.Errorf("error processing price of ticket %s, price: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.Price, eventDetail.ShowDate)
+
+						return
+					}
+
+					reserveTicketParams := database.ReserveTicketParams{
+						Column1: edRsrvtion.EventDetailID,
+						Column2: uuid.New(),
+						Column3: emailForReservation,
+						Column4: userId,
+						Column5: userPayment.ID,
+					}
+
+					newReservation, reserveTicketError := db.ReserveTicket(ctx, reserveTicketParams)
+
+					if reserveTicketError != nil {
+						errorChannel <- fmt.Errorf("error reserving ticket: %w", reserveTicketError)
+
+						return
+					}
+
+					mutex.Lock()
+					newReservations = append(newReservations, DatabaseReservationToReservationJSON(newReservation))
+					totalPrice += price
+					mutex.Unlock()
+				}
+			}(edReservation, emailReservation))
+		}
+	}
+
+	waitGroup.Wait()
+	close(errorChannel)
+
 	allErrors := []string{}
 
-	// Process ticket reservation if user didn't provide any payment_id.
-	if strings.TrimSpace(paymentId) == "" {
-		for _, eventDetailReservation := range reservations.EventDetailReservations {
-			// Capture loop variable
-			edReservation := eventDetailReservation
-
-			emailReservation := edReservation.Email
-
-			if strings.TrimSpace(emailReservation) == "" {
-				emailReservation = userEmail
-			}
-
-			for x := 0; x < edReservation.Quantity; x++ {
-				waitGroup.Go(func(edRsrvtion EventDetailReservation, emailForReservation string) func () {
-					return func() {
-						// Get event details for additional checking.
-						eventDetail, getEventDetailByIdError := db.GetEventDetailsById(ctx, edRsrvtion.EventDetailID)
-
-						if getEventDetailByIdError != nil {
-							errorChannel <- fmt.Errorf("error checking event detail tickets remaining: %w", getEventDetailByIdError)
-
-							return
-						}
-
-						currentDateTime := time.Now()
-
-						// Event already started or over.
-						if currentDateTime.After(eventDetail.ShowDate) {
-							errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
-
-							return
-						}
-
-						// Remaining tickets is already zero.
-						if eventDetail.TicketsRemaining < 1 {
-							errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
-
-							return
-						}
-
-						price, priceParseError := common.PriceStringToCents(eventDetail.Price)
-
-						// Cannot process the price.
-						if priceParseError != nil {
-							errorChannel <- fmt.Errorf("error processing price of ticket %s, price: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.Price, eventDetail.ShowDate)
-
-							return
-						}
-
-						reserveTicketParams := database.ReserveTicketParams{
-							Column1: edRsrvtion.EventDetailID,
-							Column2: uuid.New(),
-							Column3: emailForReservation,
-							Column4: userId,
-							Column5: userPayment.ID,
-						}
-
-						newReservation, reserveTicketError := db.ReserveTicket(ctx, reserveTicketParams)
-
-						if reserveTicketError != nil {
-							errorChannel <- fmt.Errorf("error reserving ticket: %w", reserveTicketError)
-
-							return
-						}
-
-						mutex.Lock()
-						newReservations = append(newReservations, DatabaseReservationToReservationJSON(newReservation))
-						totalPrice += price
-						mutex.Unlock()
-					}
-				}(edReservation, emailReservation))
-			}
-		}
-
-		waitGroup.Wait()
-		close(errorChannel)
-
-		for err := range errorChannel {
-			if err != nil {
-				allErrors = append(allErrors, err.Error())
-			}
+	for err := range errorChannel {
+		if err != nil {
+			allErrors = append(allErrors, err.Error())
 		}
 	}
 
@@ -245,39 +180,29 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		return nil, payments.PaymentResponse{}, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
 	}
 
+	paymentIntentId := ""
 	paymentResponse := payments.PaymentResponse{
 		ID: userPayment.ID,
 		ExpiresAt: userPayment.ExpiresAt,
 	}
 
-	paymentIntentId := ""
-
 	if totalPrice > 0 {
 		// Tickets reserved are not free.
-		var paymentIntentResult *stripe.PaymentIntent
-		var paymentIntentError error
+		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
-		if strings.TrimSpace(userPayment.PaymentIntentID) == "" {
-			paymentIntentParams := &stripe.PaymentIntentParams{
-				Amount: stripe.Int64(totalPrice),
-				Currency: stripe.String(strings.ToLower(userPayment.Currency)),
-				Confirm: stripe.Bool(true),
-				PaymentMethod: stripe.String(reservations.PaymentMethodID),
-				AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
-					Enabled: stripe.Bool(true),
-					AllowRedirects: stripe.String("never"),
-				},
-				Metadata: map[string]string{"payment_id": userPayment.ID.String()},
-			}
-
-			paymentIntentResult, paymentIntentError = paymentintent.New(paymentIntentParams)
-		} else {
-			paymentIntentConfirmParams := &stripe.PaymentIntentConfirmParams {
-				PaymentMethod: stripe.String(reservations.PaymentMethodID),
-			}
-
-			paymentIntentResult, paymentIntentError = paymentintent.Confirm(userPayment.PaymentIntentID, paymentIntentConfirmParams)
+		paymentIntentParams := &stripe.PaymentIntentParams{
+			Amount: stripe.Int64(totalPrice),
+			Currency: stripe.String(strings.ToLower(userPayment.Currency)),
+			Confirm: stripe.Bool(true),
+			PaymentMethod: stripe.String(reservations.PaymentMethodID),
+			AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+				Enabled: stripe.Bool(true),
+				AllowRedirects: stripe.String("never"),
+			},
+			Metadata: map[string]string{"payment_id": userPayment.ID.String()},
 		}
+
+		paymentIntentResult, paymentIntentError := paymentintent.New(paymentIntentParams)
 
 		if paymentIntentError != nil {
 			if stripeErr, ok := paymentIntentError.(*stripe.Error); ok {
@@ -314,7 +239,6 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 			case string(stripe.PaymentIntentStatusCanceled):
 				paymentResponse.Message = "payment expired, please rebook your tickets"
-
 				deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
 					PaymentID: userPayment.ID,
 					UserID: userId,
