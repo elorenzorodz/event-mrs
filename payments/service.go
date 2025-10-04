@@ -168,7 +168,7 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 	ginContext.JSON(http.StatusOK, gin.H{"payment": paymentResponse})
 }
 
-func (paymentAPIConfig *PaymentAPIConfig) ProcessStripePayment(ginContext *gin.Context) {
+func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context) {
 	stripePayloadParams := StripePayloadParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
