@@ -70,6 +70,46 @@ func (q *Queries) GetUserReservations(ctx context.Context, userID uuid.UUID) ([]
 	return items, nil
 }
 
+const getUserReservationsByPaymentId = `-- name: GetUserReservationsByPaymentId :many
+SELECT id, email, created_at, updated_at, event_detail_id, user_id, payment_id FROM reservations WHERE user_id = $1 AND payment_id = $2
+`
+
+type GetUserReservationsByPaymentIdParams struct {
+	UserID    uuid.UUID
+	PaymentID uuid.UUID
+}
+
+func (q *Queries) GetUserReservationsByPaymentId(ctx context.Context, arg GetUserReservationsByPaymentIdParams) ([]Reservation, error) {
+	rows, err := q.db.QueryContext(ctx, getUserReservationsByPaymentId, arg.UserID, arg.PaymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Reservation
+	for rows.Next() {
+		var i Reservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EventDetailID,
+			&i.UserID,
+			&i.PaymentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reserveTicket = `-- name: ReserveTicket :one
 WITH params AS (
     SELECT 

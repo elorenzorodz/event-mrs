@@ -35,3 +35,6 @@ UPDATE reservations
 SET email = $1, updated_at = NOW()
 WHERE id = $2 AND user_id = $3
 RETURNING id, email, created_at, updated_at, event_detail_id, user_id, payment_id;
+
+-- name: GetUserReservationsByPaymentId :many
+SELECT * FROM reservations WHERE user_id = $1 AND payment_id = $2;

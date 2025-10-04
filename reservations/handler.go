@@ -64,7 +64,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	userPayment := payments.Payment{}
 	paymentId := reservations.PaymentID
-
+	
 	if strings.TrimSpace(paymentId) != "" {
 		paymentuuid, parsePaymentIdError := uuid.Parse(paymentId)
 
@@ -84,6 +84,20 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		}
 
 		userPayment = payments.DatabasePaymentToPaymentJSON(currentPayment)
+		totalPrice = int64(userPayment.Amount)
+
+		userReservationsByPaymentIdParams := database.GetUserReservationsByPaymentIdParams {
+			UserID: userId,
+			PaymentID: userPayment.ID,
+		}
+
+		userReservations, getUserReservationsByPaymentIdError := db.GetUserReservationsByPaymentId(ctx, userReservationsByPaymentIdParams)
+
+		if getUserReservationsByPaymentIdError != nil {
+			return nil, payments.PaymentResponse{}, fmt.Errorf("cannot get reservations, please try again in a few minutes")
+		}
+
+		newReservations = DatabaseReservationsToReservationsJSON(userReservations)
 	} else {
 		// Create initial payment and default amount to zero first.
 		createPaymentParams := database.CreatePaymentParams {
@@ -102,87 +116,90 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 		userPayment = payments.DatabasePaymentToPaymentJSON(newPayment)
 	}
+	
+	allErrors := []string{}
 
-	for _, eventDetailReservation := range reservations.EventDetailReservations {
-		// Capture loop variable
-		edReservation := eventDetailReservation
+	// Process ticket reservation if user didn't provide any payment_id.
+	if strings.TrimSpace(paymentId) == "" {
+		for _, eventDetailReservation := range reservations.EventDetailReservations {
+			// Capture loop variable
+			edReservation := eventDetailReservation
 
-		emailReservation := edReservation.Email
+			emailReservation := edReservation.Email
 
-		if strings.TrimSpace(emailReservation) == "" {
-			emailReservation = userEmail
+			if strings.TrimSpace(emailReservation) == "" {
+				emailReservation = userEmail
+			}
+
+			for x := 0; x < edReservation.Quantity; x++ {
+				waitGroup.Go(func(edRsrvtion EventDetailReservation, emailForReservation string) func () {
+					return func() {
+						// Get event details for additional checking.
+						eventDetail, getEventDetailByIdError := db.GetEventDetailsById(ctx, edRsrvtion.EventDetailID)
+
+						if getEventDetailByIdError != nil {
+							errorChannel <- fmt.Errorf("error checking event detail tickets remaining: %w", getEventDetailByIdError)
+
+							return
+						}
+
+						currentDateTime := time.Now()
+
+						// Event already started or over.
+						if currentDateTime.After(eventDetail.ShowDate) {
+							errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
+
+							return
+						}
+
+						// Remaining tickets is already zero.
+						if eventDetail.TicketsRemaining < 1 {
+							errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
+
+							return
+						}
+
+						price, priceParseError := common.PriceStringToCents(eventDetail.Price)
+
+						// Cannot process the price.
+						if priceParseError != nil {
+							errorChannel <- fmt.Errorf("error processing price of ticket %s, price: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.Price, eventDetail.ShowDate)
+
+							return
+						}
+
+						reserveTicketParams := database.ReserveTicketParams{
+							Column1: edRsrvtion.EventDetailID,
+							Column2: uuid.New(),
+							Column3: emailForReservation,
+							Column4: userId,
+							Column5: userPayment.ID,
+						}
+
+						newReservation, reserveTicketError := db.ReserveTicket(ctx, reserveTicketParams)
+
+						if reserveTicketError != nil {
+							errorChannel <- fmt.Errorf("error reserving ticket: %w", reserveTicketError)
+
+							return
+						}
+
+						mutex.Lock()
+						newReservations = append(newReservations, DatabaseReservationToReservationJSON(newReservation))
+						totalPrice += price
+						mutex.Unlock()
+					}
+				}(edReservation, emailReservation))
+			}
 		}
 
-		for x := 0; x < edReservation.Quantity; x++ {
-			waitGroup.Go(func(edRsrvtion EventDetailReservation, emailForReservation string) func () {
-				return func() {
-					// Get event details for additional checking.
-					eventDetail, getEventDetailByIdError := db.GetEventDetailsById(ctx, edRsrvtion.EventDetailID)
+		waitGroup.Wait()
+		close(errorChannel)
 
-					if getEventDetailByIdError != nil {
-						errorChannel <- fmt.Errorf("error checking event detail tickets remaining: %w", getEventDetailByIdError)
-
-						return
-					}
-
-					currentDateTime := time.Now()
-
-					// Event already started or over.
-					if currentDateTime.After(eventDetail.ShowDate) {
-						errorChannel <- fmt.Errorf("error booking ticket, show date is already past: %s, show date: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
-
-						return
-					}
-
-					// Remaining tickets is already zero.
-					if eventDetail.TicketsRemaining < 1 {
-						errorChannel <- fmt.Errorf("no remaining tickets for: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.ShowDate)
-
-						return
-					}
-
-					price, priceParseError := common.PriceStringToCents(eventDetail.Price)
-
-					// Cannot process the price.
-					if priceParseError != nil {
-						errorChannel <- fmt.Errorf("error processing price of ticket %s, price: %s, showing on: %s", eventDetail.TicketDescription, eventDetail.Price, eventDetail.ShowDate)
-
-						return
-					}
-
-					reserveTicketParams := database.ReserveTicketParams{
-						Column1: edRsrvtion.EventDetailID,
-						Column2: uuid.New(),
-						Column3: emailForReservation,
-						Column4: userId,
-						Column5: userPayment.ID,
-					}
-
-					newReservation, reserveTicketError := db.ReserveTicket(ctx, reserveTicketParams)
-
-					if reserveTicketError != nil {
-						errorChannel <- fmt.Errorf("error reserving ticket: %w", reserveTicketError)
-
-						return
-					}
-
-					mutex.Lock()
-					newReservations = append(newReservations, DatabaseReservationToReservationJSON(newReservation))
-					totalPrice += price
-					mutex.Unlock()
-				}
-			}(edReservation, emailReservation))
-		}
-	}
-
-	waitGroup.Wait()
-	close(errorChannel)
-
-	var allErrors []string
-
-	for err := range errorChannel {
-		if err != nil {
-			allErrors = append(allErrors, err.Error())
+		for err := range errorChannel {
+			if err != nil {
+				allErrors = append(allErrors, err.Error())
+			}
 		}
 	}
 
@@ -214,14 +231,18 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 		var paymentIntentResult *stripe.PaymentIntent
 		var paymentIntentError error
-
+		
 		paymentIntentParams := &stripe.PaymentIntentParams{
-				Amount: stripe.Int64(totalPrice),
-				Currency: stripe.String(strings.ToLower(userPayment.Currency)),
-				Confirm: stripe.Bool(true),
-				PaymentMethod: stripe.String(reservations.PaymentMethodID),
-				Metadata: map[string]string{"payment_id": userPayment.ID.String()},
-			}
+			Amount: stripe.Int64(totalPrice),
+			Currency: stripe.String(strings.ToLower(userPayment.Currency)),
+			Confirm: stripe.Bool(true),
+			PaymentMethod: stripe.String(reservations.PaymentMethodID),
+			AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+				Enabled: stripe.Bool(true),
+				AllowRedirects: stripe.String("never"),
+			},
+			Metadata: map[string]string{"payment_id": userPayment.ID.String()},
+		}
 
 		if strings.TrimSpace(userPayment.PaymentIntentID) == "" {
 			paymentIntentResult, paymentIntentError = paymentintent.New(paymentIntentParams)
@@ -277,7 +298,9 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 				paymentResponse.Message = "please submit new payment method"
 			
 			default:
-				paymentResponse.Message = "please refer to next action and status"
+				if paymentResponse.Status != "error" {
+					paymentResponse.Message = "please refer to next action and status"
+				}
 		}
 	}
 
