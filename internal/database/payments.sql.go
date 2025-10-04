@@ -8,22 +8,24 @@ package database
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const createPayment = `-- name: CreatePayment :one
-INSERT INTO payments (id, amount, currency, status, user_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO payments (id, amount, currency, status, expires_at, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id
 `
 
 type CreatePaymentParams struct {
-	ID       uuid.UUID
-	Amount   string
-	Currency string
-	Status   string
-	UserID   uuid.UUID
+	ID        uuid.UUID
+	Amount    string
+	Currency  string
+	Status    string
+	ExpiresAt time.Time
+	UserID    uuid.UUID
 }
 
 func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error) {
@@ -32,6 +34,7 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		arg.Amount,
 		arg.Currency,
 		arg.Status,
+		arg.ExpiresAt,
 		arg.UserID,
 	)
 	var i Payment

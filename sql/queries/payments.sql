@@ -1,6 +1,6 @@
 -- name: CreatePayment :one
-INSERT INTO payments (id, amount, currency, status, user_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO payments (id, amount, currency, status, expires_at, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id;
 
 -- name: UpdatePayment :one
