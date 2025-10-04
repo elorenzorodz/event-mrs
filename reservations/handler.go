@@ -37,7 +37,7 @@ func DatabaseReservationsToReservationsJSON(databaseReservations []database.Rese
 	return reservations
 }
 
-func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUID, userEmail string, reservations ReservationParameters) ([]Reservation, string, string, error) {
+func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUID, userEmail string, reservations ReservationParameters) ([]Reservation, payments.PaymentResponse, error) {
 	totalTickets := 0
 
 	for _, eventDetailReservation := range reservations.EventDetailReservations {
@@ -45,7 +45,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 	}
 
 	if totalTickets == 0 {
-		return nil, "", "", fmt.Errorf("no tickets being reserved")
+		return nil, payments.PaymentResponse{}, fmt.Errorf("no tickets being reserved")
 	}
 
 	var (
@@ -69,7 +69,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		paymentuuid, parsePaymentIdError := uuid.Parse(paymentId)
 
 		if parsePaymentIdError != nil {
-			return newReservations, "", "", fmt.Errorf("invalid payment id")
+			return newReservations, payments.PaymentResponse{}, fmt.Errorf("invalid payment id")
 		}
 
 		getPaymentByIdParams := database.GetPaymentByIdParams {
@@ -80,7 +80,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		currentPayment, getPaymentByIdError := db.GetPaymentById(ctx, getPaymentByIdParams)
 		
 		if getPaymentByIdError != nil {
-			return newReservations, "", "", fmt.Errorf("cannot get payment: %w", getPaymentByIdError)
+			return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot get payment: %w", getPaymentByIdError)
 		}
 
 		userPayment = payments.DatabasePaymentToPaymentJSON(currentPayment)
@@ -97,7 +97,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		newPayment, createPaymentError := db.CreatePayment(ctx, createPaymentParams)
 
 		if createPaymentError != nil {
-			return newReservations, "", "", fmt.Errorf("cannot process payment")
+			return newReservations, payments.PaymentResponse{}, fmt.Errorf("cannot process payment")
 		}
 
 		userPayment = payments.DatabasePaymentToPaymentJSON(newPayment)
@@ -199,14 +199,15 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 			allErrors = append(allErrors, deletePaymentError.Error())
 		}
 
-		return nil, "", "", fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
+		return nil, payments.PaymentResponse{}, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
 	}
 
-	paymentMessages := []string{}
+	paymentResponse := payments.PaymentResponse{
+		ID: userPayment.ID,
+		Status: "succeeded",
+	}
+
 	paymentIntentId := ""
-	paymentNextAction := ""
-	paymentClientSecret := ""
-	paymentStatus := "succeeded"
 
 	if totalPrice > 0 {
 		// Tickets reserved are not free.
@@ -229,32 +230,32 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		}
 
 		if paymentIntentError != nil {
-			paymentStatus = "stripe payment error"
-			paymentMessages = append(paymentMessages, paymentIntentError.Error())
+			paymentResponse.Status = "error"
+			paymentResponse.Message = paymentIntentError.Error()
 		} else {
 			if paymentIntentResult != nil {
-				paymentStatus = string(paymentIntentResult.Status)
+				paymentResponse.Status = string(paymentIntentResult.Status)
 				paymentIntentId = paymentIntentResult.ID
-				paymentMessages = append(paymentMessages, "payment successful")
+				paymentResponse.Message = "payment successful"
 
-				if paymentStatus == string(stripe.PaymentIntentStatusRequiresAction) {
-					paymentClientSecret = paymentIntentResult.ClientSecret
+				if paymentResponse.Status == string(stripe.PaymentIntentStatusRequiresAction) {
+					paymentResponse.ClientSecret = paymentIntentResult.ClientSecret
 
 					if paymentIntentResult.NextAction != nil {
-						paymentNextAction = string(paymentIntentResult.NextAction.Type)
+						paymentResponse.NextAction = string(paymentIntentResult.NextAction.Type)
 					}
 				}
 			}
 		}
 	}
 	
-	if paymentStatus != "succeeded" {
-		switch paymentStatus {
+	if paymentResponse.Status != "succeeded" {
+		switch paymentResponse.Status {
 			case string(stripe.PaymentIntentStatusRequiresAction):
-				paymentMessages = append(paymentMessages, fmt.Sprintf("complete payment within next 15 minutes, next_action: %s", paymentNextAction))
+				paymentResponse.Message = "complete payment within next 15 minutes"
 
 			case string(stripe.PaymentIntentStatusCanceled):
-				paymentMessages = append(paymentMessages, fmt.Sprintf("payment expired, please rebook your tickets, status: %s", paymentStatus))
+				paymentResponse.Message = "payment expired, please rebook your tickets"
 
 				deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
 					PaymentID: userPayment.ID,
@@ -267,22 +268,22 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 					allErrors = append(allErrors, deletePaymentError.Error())
 				}
 
-				return nil, strings.Join(paymentMessages, "\n"), "", fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
+				return nil, paymentResponse, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
 
 			case string(stripe.PaymentIntentStatusProcessing):
-				paymentMessages = append(paymentMessages, "payment processing, we'll send you an email once payment succeeded")
+				paymentResponse.Message = "payment processing, we'll send you an email once payment succeeded"
 
 			case string(stripe.PaymentIntentStatusRequiresPaymentMethod):
-				paymentMessages = append(paymentMessages, fmt.Sprintf("please submit new payment method, status: %s", paymentStatus))
+				paymentResponse.Message = "please submit new payment method"
 			
 			default:
-				paymentMessages = append(paymentMessages, fmt.Sprintf("next action: %s, status: %s", paymentNextAction, paymentStatus))
+				paymentResponse.Message = "please refer to next action and status"
 		}
 	}
 
 	updatePaymentParams := database.UpdatePaymentParams {
 		Amount: fmt.Sprintf("%.2f", float64(totalPrice)/100.0),
-		Status: paymentStatus,
+		Status: paymentResponse.Status,
 		PaymentIntentID: common.StringToNullString(paymentIntentId),
 		ID: userPayment.ID,
 		UserID: userId,
@@ -296,8 +297,8 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	// This ensures that if there were any errors, we still return the tickets that were created successfully.
 	if len(allErrors) > 0 {
-		return newReservations, strings.Join(paymentMessages, "\n"), paymentClientSecret, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
+		return newReservations, paymentResponse, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
 	}
 
-	return newReservations, strings.Join(paymentMessages, "\n"), paymentClientSecret, nil
+	return newReservations, paymentResponse, nil
 }

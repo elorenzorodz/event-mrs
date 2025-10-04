@@ -34,15 +34,15 @@ func (reservationAPIConfig *ReservationAPIConfig) CreateReservation(ginContext *
 		userEmail = ginContext.MustGet("email").(string)
 	}
 
-	newReservations, paymentMessages, clientSecret, createTicketsError := SaveReservations(reservationAPIConfig.DB, ginContext.Request.Context(), userId, userEmail, reservationParams)
+	newReservations, paymentResponse, createTicketsError := SaveReservations(reservationAPIConfig.DB, ginContext.Request.Context(), userId, userEmail, reservationParams)
 
 	if createTicketsError != nil {
-		ginContext.JSON(http.StatusMultiStatus, gin.H{"events_reserved": newReservations, "payment_message": paymentMessages, "client_secret": clientSecret, "error": createTicketsError.Error()})
+		ginContext.JSON(http.StatusMultiStatus, gin.H{"events_reserved": newReservations, "payment": paymentResponse, "error": createTicketsError.Error()})
 
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{"events_reserved": newReservations})
+	ginContext.JSON(http.StatusCreated, gin.H{"events_reserved": newReservations, "payment": paymentResponse})
 }
 
 func (reservationAPIConfig *ReservationAPIConfig) GetUserReservations(ginContext *gin.Context) {
