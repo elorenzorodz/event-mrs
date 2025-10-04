@@ -9,6 +9,7 @@ import (
 	"github.com/elorenzorodz/event-mrs/events"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/elorenzorodz/event-mrs/middleware"
+	"github.com/elorenzorodz/event-mrs/payments"
 	"github.com/elorenzorodz/event-mrs/reservations"
 	"github.com/elorenzorodz/event-mrs/users"
 	"github.com/gin-gonic/gin"
@@ -17,7 +18,7 @@ import (
 )
 
 func main() {
-	// TODO: Create webhook for stripe status processing.
+	// TODO: Refund payments for deleted events.
 	// TODO: Send email confirmation for payment and reservation.
 	// TODO: Add email alert whenever the event is updated or deleted.
 	// TODO: Add email alert whenever the event detail is updated or deleted.
@@ -81,6 +82,12 @@ func main() {
 	routerWithAuthorization.GET("/reservations/:reservationId", reservationAPIConfig.GetUserReservationById)
 	routerWithAuthorization.POST("/reservations", reservationAPIConfig.CreateReservation)
 	routerWithAuthorization.PATCH("/reservations/:reservationId", reservationAPIConfig.UpdateReservationEmail)
+
+	paymentAPIConfig := payments.PaymentAPIConfig {
+		DB: database,
+	}
+
+	routerAPIPrefix.POST("/payments/wh", paymentAPIConfig.ProcessStripePayment)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
