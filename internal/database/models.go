@@ -39,6 +39,7 @@ type Payment struct {
 	Amount          string
 	Currency        string
 	Status          string
+	ExpiresAt       sql.NullTime
 	CreatedAt       time.Time
 	UpdatedAt       sql.NullTime
 	UserID          uuid.UUID

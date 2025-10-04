@@ -6,6 +6,7 @@ CREATE TABLE payments (
     amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
 	currency TEXT NOT NULL,
     status TEXT NOT NULL,
+    expires_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NULL,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE

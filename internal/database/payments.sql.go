@@ -15,7 +15,7 @@ import (
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (id, amount, currency, status, user_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, payment_intent_id, amount, currency, status, created_at, updated_at, user_id
+RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id
 `
 
 type CreatePaymentParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.Amount,
 		&i.Currency,
 		&i.Status,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserID,
@@ -49,7 +50,7 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 }
 
 const getPaymentById = `-- name: GetPaymentById :one
-SELECT id, payment_intent_id, amount, currency, status, created_at, updated_at, user_id FROM payments WHERE id = $1 AND user_id = $2
+SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE id = $1 AND user_id = $2
 `
 
 type GetPaymentByIdParams struct {
@@ -66,6 +67,7 @@ func (q *Queries) GetPaymentById(ctx context.Context, arg GetPaymentByIdParams) 
 		&i.Amount,
 		&i.Currency,
 		&i.Status,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserID,
