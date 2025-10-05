@@ -1,9 +1,11 @@
 package payments
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
@@ -11,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v83"
 	"github.com/stripe/stripe-go/v83/paymentintent"
+	"github.com/stripe/stripe-go/v83/webhook"
 )
 
 func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context) {
@@ -52,32 +55,14 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		return
 	}
 
-	currentDateTime := time.Now()
+	resultMessage := ProcessExpiredPayment(&currentPayment, paymentAPIConfig.DB, ginContext.Request.Context())
 
-	if currentPayment.ExpiresAt.After(currentDateTime) {
-		// User failed to process payment before expiration.
-		deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
-			PaymentID: currentPayment.ID,
-			UserID: userId,
-		}
-
-		deletePaymentError := paymentAPIConfig.DB.RestoreTicketsAndDeletePayment(ginContext.Request.Context(), deletePaymentParams)
-
-		if deletePaymentError != nil {
+	if strings.TrimSpace(resultMessage) != "" {
+		if strings.Contains(resultMessage, "error") {
 			ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process your payment, please try again in a few minutes"})
-
-			return
+		} else {
+			ginContext.JSON(http.StatusOK, gin.H{"message": "your payment have expired, please rebook your tickets again"})
 		}
-
-		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
-
-		paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
-			CancellationReason: stripe.String("abandoned"),
-		}
-
-		paymentintent.Cancel(currentPayment.PaymentIntentID.String, paymentIntentCancelParams)
-
-		ginContext.JSON(http.StatusOK, gin.H{"message": "your payment have expired, please rebook your tickets again"})
 
 		return
 	}
@@ -169,6 +154,27 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 }
 
 func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context) {
+	const MaxBodyBytes = int64(65536)
+	ginContext.Request.Body = http.MaxBytesReader(ginContext.Writer, ginContext.Request.Body, MaxBodyBytes)
+
+	payload, readPayloadError := io.ReadAll(ginContext.Request.Body)
+
+	if readPayloadError != nil {
+		log.Printf("error: failed to read stripe webhook request body")
+
+		return
+	}
+
+	stripeSignature := ginContext.GetHeader("Stripe-Signature")
+	stripeSigningSecret := common.GetEnvVariable("STRIPE_SIGNING_SECRET")
+	_, signatureVerificationError := webhook.ConstructEvent(payload, stripeSignature, stripeSigningSecret)
+
+	if signatureVerificationError != nil {
+		log.Printf("error: stripe signature verification failed")
+
+		return
+	}
+	
 	stripePayloadParams := StripePayloadParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
@@ -178,6 +184,50 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 		return
 	}
 
+	payment, getPaymentByIdAndPaymentIntentIdError := paymentAPIConfig.DB.GetPaymentByIdOnly(ginContext.Request.Context(), stripePayloadParams.Data.Object.Metadata.PaymentID)
+
+	if getPaymentByIdAndPaymentIntentIdError != nil {
+		log.Printf("error: %s", getPaymentByIdAndPaymentIntentIdError)
+
+		return
+	}
+
+	if payment.Status != string(stripe.PaymentIntentStatusSucceeded) {
+		resultMessage := ProcessExpiredPayment(&payment, paymentAPIConfig.DB, ginContext.Request.Context())
+
+		if strings.TrimSpace(resultMessage) != "" {
+			log.Print(resultMessage)
+
+			return
+		}
+
+		updatePaymentParams := database.UpdatePaymentParams {
+			Amount: fmt.Sprintf("%.2f", float64(stripePayloadParams.Data.Object.Amount)/100.0),
+			Status: stripePayloadParams.Data.Object.Status,
+			PaymentIntentID: common.StringToNullString(stripePayloadParams.Data.Object.ID),
+			ID: payment.ID,
+			UserID: payment.UserID,
+		}
+
+		_, updatePaymentError := paymentAPIConfig.DB.UpdatePayment(ginContext.Request.Context(), updatePaymentParams)
+
+		if updatePaymentError != nil {
+			log.Printf("error: failed to update payment")
+
+			return
+		}
+
+		switch stripePayloadParams.Type {
+			case "payment_intent.succeeded":
+				// TODO: Send email notification.
+			
+			case "payment_intent.payment_failed":
+				// TODO: Send email notification.
+
+			case "payment_intent.requires_action":
+				// TODO: Send email notification.
+		}
+	}
 	// TODO: Check if payment already succeeded. Webhook triggered by paymentintent.Confirm() from ticket reservation function.
 	
 }

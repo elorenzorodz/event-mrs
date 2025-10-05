@@ -30,3 +30,6 @@ WHERE id = @payment_id::uuid
 
 -- name: GetPaymentById :one
 SELECT * FROM payments WHERE id = $1 AND user_id = $2;
+
+-- name: GetPaymentByIdOnly :one
+SELECT * FROM payments WHERE id = $1;
