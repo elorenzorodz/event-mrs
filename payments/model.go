@@ -53,5 +53,5 @@ type StripePayloadParameters struct {
 }
 
 type PaymentParameters struct {
-	PaymentMethodID string `json:"payment_method_id"`
+	PaymentMethodID string `json:"payment_method_id" binding:"required"`
 }

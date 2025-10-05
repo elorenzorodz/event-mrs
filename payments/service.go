@@ -219,7 +219,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 
 		switch stripePayloadParams.Type {
 			case "payment_intent.succeeded":
-				// TODO: Send email notification.
+				// TODO: Send email notification with details of ticket reservations.
 			
 			case "payment_intent.payment_failed":
 				// TODO: Send email notification.
@@ -228,6 +228,4 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				// TODO: Send email notification.
 		}
 	}
-	// TODO: Check if payment already succeeded. Webhook triggered by paymentintent.Confirm() from ticket reservation function.
-	
 }
