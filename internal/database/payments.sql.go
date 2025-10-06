@@ -133,7 +133,7 @@ const updatePayment = `-- name: UpdatePayment :one
 UPDATE payments
 SET amount = $1, status = $2, updated_at = NOW(), payment_intent_id = $3
 WHERE id = $4 AND user_id = $5
-RETURNING id, amount, currency, status, user_id
+RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id
 `
 
 type UpdatePaymentParams struct {
@@ -144,15 +144,7 @@ type UpdatePaymentParams struct {
 	UserID          uuid.UUID
 }
 
-type UpdatePaymentRow struct {
-	ID       uuid.UUID
-	Amount   string
-	Currency string
-	Status   string
-	UserID   uuid.UUID
-}
-
-func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (UpdatePaymentRow, error) {
+func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (Payment, error) {
 	row := q.db.QueryRowContext(ctx, updatePayment,
 		arg.Amount,
 		arg.Status,
@@ -160,12 +152,16 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) (U
 		arg.ID,
 		arg.UserID,
 	)
-	var i UpdatePaymentRow
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.PaymentIntentID,
 		&i.Amount,
 		&i.Currency,
 		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 		&i.UserID,
 	)
 	return i, err

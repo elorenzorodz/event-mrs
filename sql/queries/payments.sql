@@ -7,7 +7,7 @@ RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_a
 UPDATE payments
 SET amount = $1, status = $2, updated_at = NOW(), payment_intent_id = $3
 WHERE id = $4 AND user_id = $5
-RETURNING id, amount, currency, status, user_id;
+RETURNING id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id;
 
 -- name: RestoreTicketsAndDeletePayment :exec
 WITH counts AS (
