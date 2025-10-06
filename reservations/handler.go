@@ -190,7 +190,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		// Tickets reserved are not free.
 		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
-		paymentIntentParams := &stripe.PaymentIntentParams{
+		paymentIntentParams := &stripe.PaymentIntentParams {
 			Amount: stripe.Int64(totalPrice),
 			Currency: stripe.String(strings.ToLower(userPayment.Currency)),
 			Confirm: stripe.Bool(true),

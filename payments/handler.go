@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/common"
@@ -28,7 +29,7 @@ func DatabasePaymentToPaymentJSON(databasePayment database.Payment) Payment {
 func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx context.Context) string {
 	currentDateTime := time.Now()
 
-	if payment.ExpiresAt.After(currentDateTime) {
+	if currentDateTime.After(payment.ExpiresAt) {
 		// User failed to process payment before expiration.
 		deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
 			PaymentID: payment.ID,
@@ -41,13 +42,30 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 			return fmt.Sprintf("error: failed to delete expired payment | ID: %s", payment.ID)
 		}
 
-		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
+		// Skip Stripe payment intent cancellation of payment_intent_id is null.
+		if payment.PaymentIntentID.Valid {
+			stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
-		paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
-			CancellationReason: stripe.String("abandoned"),
+			paymentIntentParams := &stripe.PaymentIntentParams {}
+
+			paymentIntent, retrievePaymentIntentError := paymentintent.Get(payment.PaymentIntentID.String, paymentIntentParams)
+
+			if retrievePaymentIntentError != nil {
+				return fmt.Sprintln("error: failed to get stripe payment details")
+			}
+
+			if string(paymentIntent.Status) != string(stripe.PaymentIntentStatusCanceled) {
+				paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
+					CancellationReason: stripe.String("abandoned"),
+				}
+
+				_, paymentIntentCancelError := paymentintent.Cancel(payment.PaymentIntentID.String, paymentIntentCancelParams)
+
+				if paymentIntentCancelError != nil {
+					log.Printf("error payment intent cancel: %s", paymentIntentCancelError)
+				}
+			}
 		}
-
-		paymentintent.Cancel(payment.PaymentIntentID.String, paymentIntentCancelParams)
 
 		return fmt.Sprintf("expired payment successfully deleted and restored tickets | ID: %s", payment.ID)
 	}
