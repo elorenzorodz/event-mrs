@@ -33,3 +33,6 @@ SELECT * FROM payments WHERE id = $1 AND user_id = $2;
 
 -- name: GetPaymentByIdOnly :one
 SELECT * FROM payments WHERE id = $1;
+
+-- name: GetUserPayments :many
+SELECT * FROM payments WHERE user_id = $1;

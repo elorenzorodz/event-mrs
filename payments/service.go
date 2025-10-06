@@ -263,3 +263,23 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 
 	ginContext.JSON(http.StatusOK, gin.H{"payment": paymentResponse})
 }
+
+func (paymentAPIConfig *PaymentAPIConfig) GetUserPayments(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	userPayments, getUserPaymentsError := paymentAPIConfig.DB.GetUserPayments(ginContext.Request.Context(), userId)
+
+	if getUserPaymentsError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to get payments, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"payments": DatabasePaymentsToPaymentsJSON(userPayments)})
+}

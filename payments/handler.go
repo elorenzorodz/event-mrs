@@ -26,6 +26,16 @@ func DatabasePaymentToPaymentJSON(databasePayment database.Payment) Payment {
 	}
 }
 
+func DatabasePaymentsToPaymentsJSON(databasePayments []database.Payment) []Payment {
+	payments := []Payment{}
+
+	for _, databasePayment := range databasePayments {
+		payments = append(payments, DatabasePaymentToPaymentJSON(databasePayment))
+	}
+
+	return payments
+}
+
 func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx context.Context) string {
 	currentDateTime := time.Now()
 

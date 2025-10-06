@@ -99,6 +99,43 @@ func (q *Queries) GetPaymentByIdOnly(ctx context.Context, id uuid.UUID) (Payment
 	return i, err
 }
 
+const getUserPayments = `-- name: GetUserPayments :many
+SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE user_id = $1
+`
+
+func (q *Queries) GetUserPayments(ctx context.Context, userID uuid.UUID) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, getUserPayments, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payment
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentIntentID,
+			&i.Amount,
+			&i.Currency,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const restoreTicketsAndDeletePayment = `-- name: RestoreTicketsAndDeletePayment :exec
 WITH counts AS (
   SELECT event_detail_id, COUNT(*) AS cnt
