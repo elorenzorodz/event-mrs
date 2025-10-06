@@ -283,3 +283,36 @@ func (paymentAPIConfig *PaymentAPIConfig) GetUserPayments(ginContext *gin.Contex
 
 	ginContext.JSON(http.StatusOK, gin.H{"payments": DatabasePaymentsToPaymentsJSON(userPayments)})
 }
+
+func (paymentAPIConfig *PaymentAPIConfig) GetUserPaymentById(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	paymentId, parseEventIdError := uuid.Parse(ginContext.Param("paymentId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment ID"})
+
+		return
+	}
+
+	getPaymentByIdParams := database.GetPaymentByIdParams {
+		ID: paymentId,
+		UserID: userId,
+	}
+
+	userPayment, getPaymentByIdError := paymentAPIConfig.DB.GetPaymentById(ginContext.Request.Context(), getPaymentByIdParams)
+
+	if getPaymentByIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to get payment details, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"payment": DatabasePaymentToPaymentJSON(userPayment)})
+}

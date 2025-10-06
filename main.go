@@ -88,8 +88,9 @@ func main() {
 	}
 
 	routerAPIPrefix.POST("/payments/webhook", paymentAPIConfig.StripeWebhook)
-	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)
 	routerWithAuthorization.GET("/payments", paymentAPIConfig.GetUserPayments)
+	routerWithAuthorization.GET("/payments/:paymentId", paymentAPIConfig.GetUserPaymentById)
+	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
