@@ -236,7 +236,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 			UserID: payment.UserID,
 		}
 
-		_, updatePaymentError := paymentAPIConfig.DB.UpdatePayment(ginContext.Request.Context(), updatePaymentParams)
+		updatedPayment, updatePaymentError := paymentAPIConfig.DB.UpdatePayment(ginContext.Request.Context(), updatePaymentParams)
 
 		if updatePaymentError != nil {
 			ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment"})
@@ -260,8 +260,6 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				paymentResponse.Message = fmt.Sprintf("please settle payment before %s", updatedPayment.ExpiresAt)
 		}
 	}
-
-	log.Println(stripeEvent.Type)
 
 	ginContext.JSON(http.StatusOK, gin.H{"payment": paymentResponse})
 }
