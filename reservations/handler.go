@@ -258,6 +258,8 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 			case string(stripe.PaymentIntentStatusRequiresPaymentMethod):
 				paymentResponse.Message = "please submit new payment method"
 		}
+	} else {
+		// TODO: Send email for payment confirmation with ticket reservations.
 	}
 
 	updatePaymentParams := database.UpdatePaymentParams {

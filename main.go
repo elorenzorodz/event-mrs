@@ -92,6 +92,7 @@ func main() {
 	routerWithAuthorization.GET("/payments", paymentAPIConfig.GetUserPayments)
 	routerWithAuthorization.GET("/payments/:paymentId", paymentAPIConfig.GetUserPaymentById)
 	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)
+	routerWithAuthorization.POST("/payments/:paymentId/refund", paymentAPIConfig.RefundPayment)
 
 	log.Printf("Server starting on port %s in %s mode", port, ginMode)
 
