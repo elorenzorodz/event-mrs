@@ -250,6 +250,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				paymentResponse.Message = "payment succeeded"
 			
 			case "payment_intent.payment_failed":
+				// TODO: Notify user of failed payment.
 				paymentResponse.Message = paymentIntent.LastPaymentError.Msg
 
 			case "payment_intent.requires_action":
