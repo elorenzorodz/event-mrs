@@ -19,6 +19,7 @@ import (
 
 func main() {
 	// TODO: Refund payments for deleted events.
+	// TODO: Create service to handle user request for refunds.
 	// TODO: Send email confirmation for payment and reservation.
 	// TODO: Add email alert whenever the event is updated or deleted.
 	// TODO: Add email alert whenever the event detail is updated or deleted.

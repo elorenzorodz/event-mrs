@@ -250,14 +250,21 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				paymentResponse.Message = "payment succeeded"
 			
 			case "payment_intent.payment_failed":
-				paymentResponse.ClientSecret = paymentIntent.ClientSecret
-				paymentResponse.NextAction = string(paymentIntent.NextAction.Type)
 				paymentResponse.Message = paymentIntent.LastPaymentError.Msg
 
 			case "payment_intent.requires_action":
 				paymentResponse.ClientSecret = paymentIntent.ClientSecret
 				paymentResponse.NextAction = string(paymentIntent.NextAction.Type)
 				paymentResponse.Message = fmt.Sprintf("please settle payment before %s", updatedPayment.ExpiresAt)
+
+			default:
+				if paymentIntent.NextAction != nil {
+					paymentResponse.NextAction = string(paymentIntent.NextAction.Type)
+				}
+
+				if paymentIntent.LastPaymentError != nil {
+					paymentResponse.Message = paymentIntent.LastPaymentError.Msg
+				}
 		}
 	}
 
