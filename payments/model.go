@@ -35,3 +35,16 @@ type PaymentResponse struct {
 type PaymentParameters struct {
 	PaymentMethodID string `json:"payment_method_id" binding:"required"`
 }
+
+type PaymentRefundResponse struct {
+	Message 		string				`json:"message"`
+	PaymentRefunds 	[]PaymentRefunded	`json:"payment_refunded"`
+}
+
+type PaymentRefunded struct {
+	PaymentID         uuid.UUID `json:"payment_id"`
+	Amount            string    `json:"amount_refunded"`
+	Title             string    `json:"title"`
+	TicketDescription string    `json:"ticket_description"`
+	ShowDate          time.Time `json:"show_date"`
+}

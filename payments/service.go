@@ -323,3 +323,51 @@ func (paymentAPIConfig *PaymentAPIConfig) GetUserPaymentById(ginContext *gin.Con
 
 	ginContext.JSON(http.StatusOK, gin.H{"payment": DatabasePaymentToPaymentJSON(userPayment)})
 }
+
+func (paymentAPIConfig *PaymentAPIConfig) RefundPayment(ginContext *gin.Context) {
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	paymentId, parsePaymentIdError := uuid.Parse(ginContext.Param("paymentId"))
+
+	if parsePaymentIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment ID"})
+
+		return
+	}
+
+	getpaymentAndReservationDetailsParams := database.GetPaymentAndReservationDetailsParams {
+		ID: paymentId,
+		UserID: userId,
+	}
+
+	paymentReservationDetails, getPaymentAndReservationDetailsError := paymentAPIConfig.DB.GetPaymentAndReservationDetails(ginContext.Request.Context(), getpaymentAndReservationDetailsParams)
+
+	if getPaymentAndReservationDetailsError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get payment and reservation details, please try again in a few minutes"})
+
+		return
+	}
+
+	// Skip refund if payment is not of succeeded status.
+	if paymentReservationDetails[0].Status != string(stripe.PaymentIntentStatusSucceeded) {
+		ginContext.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("cannot proceed with refund, payment is of status %s", paymentReservationDetails[0].Status)})
+
+		return
+	}
+
+	paymentRefundResponse, processRefundErrors := ProcessRefund(paymentAPIConfig.DB, ginContext.Request.Context(), paymentReservationDetails)
+
+	if processRefundErrors != nil {
+		ginContext.JSON(http.StatusMultiStatus, gin.H{"payment_refund": paymentRefundResponse, "error:": processRefundErrors})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"payment_refund": paymentRefundResponse})
+}

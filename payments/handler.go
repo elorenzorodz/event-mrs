@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v83"
 	"github.com/stripe/stripe-go/v83/paymentintent"
+	"github.com/stripe/stripe-go/v83/refund"
 )
 
 func DatabasePaymentToPaymentJSON(databasePayment database.Payment) Payment {
@@ -41,9 +45,9 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 
 	if currentDateTime.After(payment.ExpiresAt) {
 		// User failed to process payment before expiration.
-		deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams {
+		deletePaymentParams := database.RestoreTicketsAndDeletePaymentParams{
 			PaymentID: payment.ID,
-			UserID: payment.UserID,
+			UserID:    payment.UserID,
 		}
 
 		deletePaymentError := db.RestoreTicketsAndDeletePayment(ctx, deletePaymentParams)
@@ -56,7 +60,7 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 		if payment.PaymentIntentID.Valid {
 			stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
-			paymentIntentParams := &stripe.PaymentIntentParams {}
+			paymentIntentParams := &stripe.PaymentIntentParams{}
 
 			paymentIntent, retrievePaymentIntentError := paymentintent.Get(payment.PaymentIntentID.String, paymentIntentParams)
 
@@ -65,7 +69,7 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 			}
 
 			if string(paymentIntent.Status) != string(stripe.PaymentIntentStatusCanceled) {
-				paymentIntentCancelParams := &stripe.PaymentIntentCancelParams {
+				paymentIntentCancelParams := &stripe.PaymentIntentCancelParams{
 					CancellationReason: stripe.String("abandoned"),
 				}
 
@@ -81,4 +85,183 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 	}
 
 	return ""
+}
+
+func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservationDetails []database.GetPaymentAndReservationDetailsRow) (PaymentRefundResponse, error) {
+	type ReservationForRefund struct {
+		EventTitle        string
+		TicketDescription string
+		ShowDate          time.Time
+		PaymentID         uuid.UUID
+		ReservationID     uuid.UUID
+		EventDetailID     uuid.UUID
+		Amount            int64
+	}
+
+	var (
+		reservationsToBeRefunded []ReservationForRefund
+		mutex                    sync.Mutex
+		waitGroup                sync.WaitGroup
+		errorChannel             = make(chan error, len(paymentReservationDetails))
+	)
+
+	// Create array of reservations to be refunded and total refund amount.
+	for _, paymentAndReservationDetail := range paymentReservationDetails {
+		paymentReservationDetail := paymentAndReservationDetail
+
+		waitGroup.Go(func() {
+			currentDateTime := time.Now()
+
+			dateTimeDifference := paymentReservationDetail.ShowDate.Time.Sub(currentDateTime)
+
+			if dateTimeDifference < 0 {
+				dateTimeDifference = -dateTimeDifference
+			}
+
+			// Allow refund for show dates with more than 2 days difference.
+			if dateTimeDifference.Hours() > 48 {
+				amount, amountParseError := common.PriceStringToCents(paymentReservationDetail.Price.String)
+
+				if amountParseError != nil {
+					errorChannel <- fmt.Errorf("error processing refund for price of ticket %s, for event: %s, showing on: %s", paymentReservationDetail.TicketDescription.String, paymentReservationDetail.Title.String, paymentReservationDetail.ShowDate.Time)
+
+					return
+				}
+
+				reservation := ReservationForRefund{
+					EventTitle: 		paymentReservationDetail.Title.String,
+					TicketDescription: 	paymentReservationDetail.TicketDescription.String,
+					ShowDate: 			paymentReservationDetail.ShowDate.Time,
+					PaymentID:     		paymentReservationDetail.PaymentID,
+					ReservationID: 		paymentReservationDetail.ReservationID.UUID,
+					EventDetailID: 		paymentReservationDetail.EventDetailID.UUID,
+					Amount:        		amount,
+				}
+
+				mutex.Lock()
+				reservationsToBeRefunded = append(reservationsToBeRefunded, reservation)
+				mutex.Unlock()
+			}
+		})
+	}
+
+	waitGroup.Wait()
+	close(errorChannel)
+
+	allErrors := []string{}
+
+	for err := range errorChannel {
+		if err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
+	}
+
+	if len(reservationsToBeRefunded) == 0 {
+		return PaymentRefundResponse{}, fmt.Errorf("errors: \n%s", strings.Join(allErrors, ",\n"))
+	}
+
+	
+	userId, _ := uuid.Parse(paymentReservationDetails[0].UserID.String())
+
+	var (
+		paymentRefundResponse PaymentRefundResponse
+		refundMutex           sync.Mutex
+		refundWaitGroup       sync.WaitGroup
+		totalRefundAmount     int64
+		refundErrorChannel    = make(chan error, len(paymentReservationDetails))
+	)
+
+	for _, refundReservation := range reservationsToBeRefunded {
+		reservationToBeRefunded := refundReservation
+
+		refundWaitGroup.Go(func() {
+			refundPaymentAndRestoreTicketsParams := database.RefundPaymentAndRestoreTicketsParams{
+				EventDetailID: reservationToBeRefunded.EventDetailID,
+				Amount:        fmt.Sprintf("%.2f", float64(reservationToBeRefunded.Amount)/100.0),
+				PaymentID:     reservationToBeRefunded.PaymentID,
+				UserID:        userId,
+				ReservationID: reservationToBeRefunded.ReservationID,
+			}
+
+			refundPaymentAndRestoreTicketsError := db.RefundPaymentAndRestoreTickets(ctx, refundPaymentAndRestoreTicketsParams)
+
+			if refundPaymentAndRestoreTicketsError != nil {
+				refundErrorChannel <- fmt.Errorf("error updating payment refund for %s - %s, price: %v, show date: %s", reservationToBeRefunded.EventTitle, reservationToBeRefunded.TicketDescription, reservationToBeRefunded.Amount, reservationToBeRefunded.ShowDate)
+
+				return
+			}
+
+			paymentRefunded := PaymentRefunded {
+				PaymentID: reservationToBeRefunded.PaymentID,
+				Amount: fmt.Sprintf("%.2f", float64(reservationToBeRefunded.Amount)/100.0),
+				Title: reservationToBeRefunded.EventTitle,
+				TicketDescription: reservationToBeRefunded.TicketDescription,
+				ShowDate: reservationToBeRefunded.ShowDate,
+			}
+
+			refundMutex.Lock()
+			paymentRefundResponse.PaymentRefunds = append(paymentRefundResponse.PaymentRefunds, paymentRefunded)
+			totalRefundAmount += reservationToBeRefunded.Amount
+			refundMutex.Unlock()
+		})
+	}
+
+	refundWaitGroup.Wait()
+	close(refundErrorChannel)
+
+	allRefundErrors := []string{}
+
+	for err := range refundErrorChannel {
+		if err != nil {
+			allRefundErrors = append(allRefundErrors, err.Error())
+		}
+	}
+
+	if len(paymentRefundResponse.PaymentRefunds) == 0 {
+		return PaymentRefundResponse{}, fmt.Errorf("errors: \n%s, %s", strings.Join(allErrors, ",\n"), strings.Join(allRefundErrors, ",\n"))
+	}
+
+	paymentIntentId := paymentReservationDetails[0].PaymentIntentID.String
+	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
+
+	refundParams := &stripe.RefundParams {
+		Amount: stripe.Int64(totalRefundAmount),
+		PaymentIntent: stripe.String(paymentIntentId),
+	}
+
+	refundResult, refundError := refund.New(refundParams)
+
+	if refundError != nil {
+		// TODO: Send email to team.
+		return PaymentRefundResponse{}, fmt.Errorf("refund failed, we have notified our team to manually refund the amount")
+	}
+
+	var aggregatedErrors error = nil
+
+	if len(allErrors) > 0 {
+		aggregatedErrors = fmt.Errorf("%s", strings.Join(allErrors, ",\n"))
+	}
+
+	if len(allRefundErrors) > 0 {
+		if aggregatedErrors == nil {
+			aggregatedErrors = fmt.Errorf("%s", strings.Join(allRefundErrors, ",\n"))
+		} else {
+			aggregatedErrors = fmt.Errorf("%s\n%s", aggregatedErrors, strings.Join(allRefundErrors, ",\n"))
+		}
+	}
+
+	switch refundResult.Status {
+		case stripe.RefundStatusFailed:
+			paymentRefundResponse.Message = fmt.Sprintf("%s, please contact our support for further assistance", string(refundResult.FailureReason))
+
+			return paymentRefundResponse, aggregatedErrors
+
+		case stripe.RefundStatusPending:
+			paymentRefundResponse.Message = "your refund is on the way, we'll notify you once it succeeded"
+
+		case stripe.RefundStatusSucceeded:
+			paymentRefundResponse.Message = "refund succeeded"
+	}
+
+	return paymentRefundResponse, aggregatedErrors
 }

@@ -52,6 +52,88 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 	return i, err
 }
 
+const getPaymentAndReservationDetails = `-- name: GetPaymentAndReservationDetails :many
+SELECT 
+	p.id AS payment_id,
+	p.payment_intent_id,
+  p.user_id, 
+	p.amount,
+	p.status,
+	r.id AS reservation_id,
+	r.email,
+	ed.id AS event_detail_id,
+	e.title,
+	ed.ticket_description,
+	ed.show_date,
+	ed.price 
+FROM payments AS p 
+LEFT JOIN reservations AS r
+ON r.payment_id = p.id 
+LEFT JOIN event_details AS ed
+ON ed.id = r.event_detail_id 
+LEFT JOIN events AS e
+ON e.id = ed.event_id 
+WHERE 
+	p.id = $1
+	AND p.user_id = $2
+`
+
+type GetPaymentAndReservationDetailsParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type GetPaymentAndReservationDetailsRow struct {
+	PaymentID         uuid.UUID
+	PaymentIntentID   sql.NullString
+	UserID            uuid.UUID
+	Amount            string
+	Status            string
+	ReservationID     uuid.NullUUID
+	Email             sql.NullString
+	EventDetailID     uuid.NullUUID
+	Title             sql.NullString
+	TicketDescription sql.NullString
+	ShowDate          sql.NullTime
+	Price             sql.NullString
+}
+
+func (q *Queries) GetPaymentAndReservationDetails(ctx context.Context, arg GetPaymentAndReservationDetailsParams) ([]GetPaymentAndReservationDetailsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPaymentAndReservationDetails, arg.ID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPaymentAndReservationDetailsRow
+	for rows.Next() {
+		var i GetPaymentAndReservationDetailsRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.PaymentIntentID,
+			&i.UserID,
+			&i.Amount,
+			&i.Status,
+			&i.ReservationID,
+			&i.Email,
+			&i.EventDetailID,
+			&i.Title,
+			&i.TicketDescription,
+			&i.ShowDate,
+			&i.Price,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPaymentById = `-- name: GetPaymentById :one
 SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE id = $1 AND user_id = $2
 `
@@ -134,6 +216,44 @@ func (q *Queries) GetUserPayments(ctx context.Context, userID uuid.UUID) ([]Paym
 		return nil, err
 	}
 	return items, nil
+}
+
+const refundPaymentAndRestoreTickets = `-- name: RefundPaymentAndRestoreTickets :exec
+WITH event_details_update AS (
+	UPDATE event_details AS ed
+	SET tickets_remaining = ed.tickets_remaining + 1 
+	WHERE id = $2::uuid
+  RETURNING ed.id
+),
+payment_update AS (
+	UPDATE payments AS p
+	SET amount = p.amount - $3::numeric
+	WHERE id = $4::uuid AND user_id = $5::uuid
+  RETURNING p.id
+)
+DELETE FROM reservations 
+WHERE id = $1::uuid
+	AND EXISTS (SELECT 1 FROM event_details_update)
+	AND EXISTS (SELECT 1 FROM payment_update)
+`
+
+type RefundPaymentAndRestoreTicketsParams struct {
+	ReservationID uuid.UUID
+	EventDetailID uuid.UUID
+	Amount        string
+	PaymentID     uuid.UUID
+	UserID        uuid.UUID
+}
+
+func (q *Queries) RefundPaymentAndRestoreTickets(ctx context.Context, arg RefundPaymentAndRestoreTicketsParams) error {
+	_, err := q.db.ExecContext(ctx, refundPaymentAndRestoreTickets,
+		arg.ReservationID,
+		arg.EventDetailID,
+		arg.Amount,
+		arg.PaymentID,
+		arg.UserID,
+	)
+	return err
 }
 
 const restoreTicketsAndDeletePayment = `-- name: RestoreTicketsAndDeletePayment :exec
