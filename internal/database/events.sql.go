@@ -142,6 +142,65 @@ func (q *Queries) GetEvents(ctx context.Context, arg GetEventsParams) ([]GetEven
 	return items, nil
 }
 
+const getPaidEventForRefund = `-- name: GetPaidEventForRefund :many
+SELECT
+    p.id AS payment_id,
+    p.payment_intent_id,
+    p.amount,
+    p.status
+FROM events AS e
+JOIN event_details AS ed
+    ON ed.event_id = e.id
+JOIN reservations AS r
+    ON r.event_detail_id = ed.id
+JOIN payments AS p
+    ON p.id = r.payment_id
+JOIN users AS u
+    ON u.id = p.user_id
+WHERE e.id = $1::uuid AND e.user_id = $2::uuid
+GROUP BY p.id, p.payment_intent_id, p.amount, p.status
+`
+
+type GetPaidEventForRefundParams struct {
+	EventID uuid.UUID
+	UserID  uuid.UUID
+}
+
+type GetPaidEventForRefundRow struct {
+	PaymentID       uuid.UUID
+	PaymentIntentID sql.NullString
+	Amount          string
+	Status          string
+}
+
+func (q *Queries) GetPaidEventForRefund(ctx context.Context, arg GetPaidEventForRefundParams) ([]GetPaidEventForRefundRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPaidEventForRefund, arg.EventID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPaidEventForRefundRow
+	for rows.Next() {
+		var i GetPaidEventForRefundRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.PaymentIntentID,
+			&i.Amount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserEventById = `-- name: GetUserEventById :one
 SELECT id, title, description, organizer, created_at, updated_at, user_id
 FROM events

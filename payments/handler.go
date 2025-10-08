@@ -259,8 +259,14 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 	if refundError != nil {
 		// TODO: Send email to team.
 		if stripeError, ok := refundError.(*stripe.Error); ok {
-			createPaymentLogParams.Status = stripeError.Param
+			createPaymentLogParams.Status = string(stripeError.Code)
 			createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+
+			_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogParams)
+
+			if createPaymentLogError != nil {
+				log.Printf("error: create payment log - %s", createPaymentLogError)
+			}
 		}
 
 		return PaymentRefundResponse{}, fmt.Errorf("refund failed, we have notified our team to manually refund the amount")
@@ -289,7 +295,7 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 
 		case stripe.RefundStatusPending:
 			paymentRefundResponse.Message = "your refund is on the way, we'll notify you once it succeeded"
-			createPaymentLogParams.Description = common.StringToNullString(paymentRefundResponse.Message)
+			createPaymentLogParams.Description = common.StringToNullString("refund pending")
 
 		case stripe.RefundStatusSucceeded:
 			paymentRefundResponse.Message = "refund succeeded"
