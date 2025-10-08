@@ -41,7 +41,7 @@ SELECT * FROM payments WHERE user_id = $1;
 SELECT 
 	p.id AS payment_id,
 	p.payment_intent_id,
-  p.user_id, 
+  	p.user_id, 
 	p.amount,
 	p.status,
 	r.id AS reservation_id,

@@ -227,7 +227,7 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 		return
 	}
 
-	deleteEventParams := database.DeleteEventParams{
+	deleteEventParams := database.DeleteEventParams {
 		ID:     eventId,
 		UserID: userId,
 	}

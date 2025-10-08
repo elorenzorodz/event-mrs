@@ -41,3 +41,29 @@ WHERE
 OR LOWER(e.description) LIKE $2 
 OR LOWER(e.organizer) LIKE $3) 
 AND (ed.show_date >= $4 AND ed.show_date <= $5);
+
+-- name: RefundEventPayment :many
+SELECT
+    e.id AS event_id,
+    e.title,
+    ed.id AS event_detail_id,
+    ed.ticket_description,
+    ed.price,
+    ed.show_date,
+    r.id AS reservation_id,
+    p.id AS payment_id,
+    p.payment_intent_id,
+    p.amount,
+    p.status,
+    p.user_id,
+    u.email
+FROM events AS e
+JOIN event_details AS ed
+    ON ed.event_id = e.id
+JOIN reservations AS r
+    ON r.event_detail_id = ed.id
+JOIN payments AS p
+    ON p.id = r.payment_id
+JOIN users AS u
+    ON u.id = p.user_id
+WHERE e.id = $1 AND e.user_id = $2;
