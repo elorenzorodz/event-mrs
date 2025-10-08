@@ -58,7 +58,7 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 
 		// Skip Stripe payment intent cancellation of payment_intent_id is null.
 		if payment.PaymentIntentID.Valid {
-			createPaymentLogsParams := database.CreatePaymentLogParams {
+			createPaymentLogParams := database.CreatePaymentLogParams {
 				ID: uuid.New(),
 				PaymentIntentID: payment.PaymentIntentID.String,
 				Amount: payment.Amount,
@@ -86,10 +86,10 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 				if paymentIntentCancelError != nil {
 					log.Printf("error payment intent cancel: %s", paymentIntentCancelError)
 				} else {
-					createPaymentLogsParams.Status = "cancelled"
-					createPaymentLogsParams.Description = common.StringToNullString("payment expired")
+					createPaymentLogParams.Status = "cancelled"
+					createPaymentLogParams.Description = common.StringToNullString("payment expired")
 
-					_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogsParams)
+					_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogParams)
 
 					if createPaymentLogError != nil {
 						log.Printf("error: create payment log - %s", createPaymentLogError)

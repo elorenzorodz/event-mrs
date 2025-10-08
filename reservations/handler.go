@@ -189,7 +189,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	if totalPrice > 0 {
 		// Tickets reserved are not free.
-		createPaymentLogsParams := database.CreatePaymentLogParams {
+		createPaymentLogParams := database.CreatePaymentLogParams {
 			ID: uuid.New(),
 			PaymentMethodID: common.StringToNullString(reservations.PaymentMethodID),
 			Amount: fmt.Sprintf("%.2f", float64(totalPrice)/100.0),
@@ -240,11 +240,11 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 			}
 		}
 
-		createPaymentLogsParams.Status = paymentResponse.Status
-		createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
-		createPaymentLogsParams.PaymentIntentID = paymentIntentId
+		createPaymentLogParams.Status = paymentResponse.Status
+		createPaymentLogParams.Description = common.StringToNullString(paymentResponse.Message)
+		createPaymentLogParams.PaymentIntentID = paymentIntentId
 
-		_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogsParams)
+		_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogParams)
 
 		if createPaymentLogError != nil {
 			log.Printf("error: create payment log - %s", createPaymentLogError)

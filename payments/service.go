@@ -70,7 +70,7 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		return
 	}
 
-	createPaymentLogsParams := database.CreatePaymentLogParams {
+	createPaymentLogParams := database.CreatePaymentLogParams {
 		ID: uuid.New(),
 		PaymentMethodID: common.StringToNullString(paymentParams.PaymentMethodID),
 		Amount: currentPayment.Amount,
@@ -118,11 +118,11 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		}
 	}
 
-	createPaymentLogsParams.PaymentIntentID = paymentIntentId
-	createPaymentLogsParams.Status = paymentResponse.Status
-	createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
+	createPaymentLogParams.PaymentIntentID = paymentIntentId
+	createPaymentLogParams.Status = paymentResponse.Status
+	createPaymentLogParams.Description = common.StringToNullString(paymentResponse.Message)
 
-	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogsParams)
+	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogParams)
 
 	if createPaymentLogError != nil {
 		log.Printf("error: create payment log - %s", createPaymentLogError)
@@ -256,7 +256,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 			return
 		}
 
-		createPaymentLogsParams := database.CreatePaymentLogParams {
+		createPaymentLogParams := database.CreatePaymentLogParams {
 			ID: uuid.New(),
 			Status: string(paymentIntent.Status),
 			PaymentIntentID: paymentIntent.ID,
@@ -305,9 +305,9 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				}
 		}
 
-		createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
+		createPaymentLogParams.Description = common.StringToNullString(paymentResponse.Message)
 
-		_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogsParams)
+		_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogParams)
 
 		if createPaymentLogError != nil {
 			log.Printf("error: create payment log - %s", createPaymentLogError)
