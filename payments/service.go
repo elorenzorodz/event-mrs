@@ -379,6 +379,8 @@ func (paymentAPIConfig *PaymentAPIConfig) RefundPayment(ginContext *gin.Context)
 		return
 	}
 
+	userEmail := ginContext.MustGet("email").(string)
+
 	paymentId, parsePaymentIdError := uuid.Parse(ginContext.Param("paymentId"))
 
 	if parsePaymentIdError != nil {
@@ -407,7 +409,7 @@ func (paymentAPIConfig *PaymentAPIConfig) RefundPayment(ginContext *gin.Context)
 		return
 	}
 
-	paymentRefundResponse, processRefundErrors := ProcessRefund(paymentAPIConfig.DB, ginContext.Request.Context(), paymentReservationDetails)
+	paymentRefundResponse, processRefundErrors := ProcessRefund(paymentAPIConfig.DB, ginContext.Request.Context(), paymentReservationDetails, userEmail)
 
 	if processRefundErrors != nil {
 		ginContext.JSON(http.StatusMultiStatus, gin.H{"payment_refund": paymentRefundResponse, "error:": processRefundErrors})

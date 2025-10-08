@@ -104,7 +104,7 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 	return ""
 }
 
-func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservationDetails []database.GetPaymentAndReservationDetailsRow) (PaymentRefundResponse, error) {
+func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservationDetails []database.GetPaymentAndReservationDetailsRow, userEmail string) (PaymentRefundResponse, error) {
 	type ReservationForRefund struct {
 		EventTitle        string
 		TicketDescription string
@@ -239,6 +239,14 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 	}
 
 	paymentIntentId := paymentReservationDetails[0].PaymentIntentID.String
+	createPaymentLogParams := database.CreatePaymentLogParams {
+		ID: uuid.New(),
+		PaymentIntentID: paymentIntentId,
+		Amount: fmt.Sprintf("%.2f", float64(totalRefundAmount)/100.0),
+		UserEmail: userEmail,
+		PaymentID: paymentReservationDetails[0].PaymentID,
+	}
+
 	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
 	refundParams := &stripe.RefundParams {
@@ -250,6 +258,11 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 
 	if refundError != nil {
 		// TODO: Send email to team.
+		if stripeError, ok := refundError.(*stripe.Error); ok {
+			createPaymentLogParams.Status = stripeError.Param
+			createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+		}
+
 		return PaymentRefundResponse{}, fmt.Errorf("refund failed, we have notified our team to manually refund the amount")
 	}
 
@@ -267,18 +280,27 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 		}
 	}
 
+	createPaymentLogParams.Status = string(refundResult.Status)
+
 	switch refundResult.Status {
 		case stripe.RefundStatusFailed:
 			paymentRefundResponse.Message = fmt.Sprintf("%s, please contact our support for further assistance", string(refundResult.FailureReason))
-
-			return paymentRefundResponse, aggregatedErrors
+			createPaymentLogParams.Description = common.StringToNullString(string(refundResult.FailureReason))
 
 		case stripe.RefundStatusPending:
 			paymentRefundResponse.Message = "your refund is on the way, we'll notify you once it succeeded"
+			createPaymentLogParams.Description = common.StringToNullString(paymentRefundResponse.Message)
 
 		case stripe.RefundStatusSucceeded:
 			paymentRefundResponse.Message = "refund succeeded"
+			createPaymentLogParams.Description = common.StringToNullString(paymentRefundResponse.Message)
 	}
 
+	_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogParams)
+
+	if createPaymentLogError != nil {
+		log.Printf("error: create payment log - %s", createPaymentLogError)
+	}
+	
 	return paymentRefundResponse, aggregatedErrors
 }
