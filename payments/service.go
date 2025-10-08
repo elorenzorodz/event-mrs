@@ -26,6 +26,8 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		return
 	}
 
+	userEmail := ginContext.MustGet("email").(string)
+
 	paymentId, parsePaymentIdError := uuid.Parse(ginContext.Param("paymentId"))
 
 	if parsePaymentIdError != nil {
@@ -56,7 +58,7 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		return
 	}
 
-	resultMessage := ProcessExpiredPayment(&currentPayment, paymentAPIConfig.DB, ginContext.Request.Context())
+	resultMessage := ProcessExpiredPayment(&currentPayment, paymentAPIConfig.DB, ginContext.Request.Context(), userEmail)
 
 	if strings.TrimSpace(resultMessage) != "" {
 		if strings.Contains(resultMessage, "error") {
@@ -66,6 +68,14 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 		}
 
 		return
+	}
+
+	createPaymentLogsParams := database.CreatePaymentLogParams {
+		ID: uuid.New(),
+		PaymentMethodID: common.StringToNullString(paymentParams.PaymentMethodID),
+		Amount: currentPayment.Amount,
+		UserEmail: userEmail,
+		PaymentID: currentPayment.ID,
 	}
 
 	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
@@ -106,6 +116,16 @@ func (paymentAPIConfig *PaymentAPIConfig) UpdatePayment(ginContext *gin.Context)
 				paymentResponse.Message = "please refer to next action and status"
 			}
 		}
+	}
+
+	createPaymentLogsParams.PaymentIntentID = paymentIntentId
+	createPaymentLogsParams.Status = paymentResponse.Status
+	createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
+
+	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogsParams)
+
+	if createPaymentLogError != nil {
+		log.Printf("error: create payment log - %s", createPaymentLogError)
 	}
 
 	if paymentResponse.Status != string(stripe.PaymentIntentStatusSucceeded) {
@@ -213,6 +233,14 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 		return
 	}
 
+	user, getUserError := paymentAPIConfig.DB.GetUserById(ginContext.Request.Context(), payment.ID)
+
+	if getUserError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user details"})
+
+		return
+	}
+
 	paymentResponse := PaymentResponse {
 		ID: payment.ID,
 		Status: payment.Status,
@@ -220,12 +248,21 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 	}
 
 	if payment.Status == string(stripe.PaymentIntentStatusProcessing) {
-		resultMessage := ProcessExpiredPayment(&payment, paymentAPIConfig.DB, ginContext.Request.Context())
+		resultMessage := ProcessExpiredPayment(&payment, paymentAPIConfig.DB, ginContext.Request.Context(), user.Email)
 
 		if strings.TrimSpace(resultMessage) != "" {
 			ginContext.JSON(http.StatusMultiStatus, gin.H{"message": resultMessage})
 
 			return
+		}
+
+		createPaymentLogsParams := database.CreatePaymentLogParams {
+			ID: uuid.New(),
+			Status: string(paymentIntent.Status),
+			PaymentIntentID: paymentIntent.ID,
+			Amount: fmt.Sprintf("%.2f", float64(paymentIntent.Amount)/100.0),
+			UserEmail: user.Email,
+			PaymentID: payment.ID,
 		}
 
 		updatePaymentParams := database.UpdatePaymentParams {
@@ -266,6 +303,14 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				if paymentIntent.LastPaymentError != nil {
 					paymentResponse.Message = paymentIntent.LastPaymentError.Msg
 				}
+		}
+
+		createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
+
+		_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogsParams)
+
+		if createPaymentLogError != nil {
+			log.Printf("error: create payment log - %s", createPaymentLogError)
 		}
 	}
 

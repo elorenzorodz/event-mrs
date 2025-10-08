@@ -45,6 +45,18 @@ type Payment struct {
 	UserID          uuid.UUID
 }
 
+type PaymentLog struct {
+	ID              uuid.UUID
+	Status          string
+	Description     sql.NullString
+	PaymentIntentID string
+	PaymentMethodID sql.NullString
+	Amount          string
+	CreatedAt       time.Time
+	UserEmail       string
+	PaymentID       uuid.UUID
+}
+
 type Reservation struct {
 	ID            uuid.UUID
 	Email         string

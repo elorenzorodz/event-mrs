@@ -40,7 +40,7 @@ func DatabasePaymentsToPaymentsJSON(databasePayments []database.Payment) []Payme
 	return payments
 }
 
-func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx context.Context) string {
+func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx context.Context, userEmail string) string {
 	currentDateTime := time.Now()
 
 	if currentDateTime.After(payment.ExpiresAt) {
@@ -58,6 +58,14 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 
 		// Skip Stripe payment intent cancellation of payment_intent_id is null.
 		if payment.PaymentIntentID.Valid {
+			createPaymentLogsParams := database.CreatePaymentLogParams {
+				ID: uuid.New(),
+				PaymentIntentID: payment.PaymentIntentID.String,
+				Amount: payment.Amount,
+				UserEmail: userEmail,
+				PaymentID: payment.ID,
+			}
+
 			stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
 			paymentIntentParams := &stripe.PaymentIntentParams{}
@@ -77,6 +85,15 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 
 				if paymentIntentCancelError != nil {
 					log.Printf("error payment intent cancel: %s", paymentIntentCancelError)
+				} else {
+					createPaymentLogsParams.Status = "cancelled"
+					createPaymentLogsParams.Description = common.StringToNullString("payment expired")
+
+					_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogsParams)
+
+					if createPaymentLogError != nil {
+						log.Printf("error: create payment log - %s", createPaymentLogError)
+					}
 				}
 			}
 		}

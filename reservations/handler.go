@@ -3,6 +3,7 @@ package reservations
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -188,6 +189,14 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 
 	if totalPrice > 0 {
 		// Tickets reserved are not free.
+		createPaymentLogsParams := database.CreatePaymentLogParams {
+			ID: uuid.New(),
+			PaymentMethodID: common.StringToNullString(reservations.PaymentMethodID),
+			Amount: fmt.Sprintf("%.2f", float64(totalPrice)/100.0),
+			UserEmail: userEmail,
+			PaymentID: userPayment.ID,
+		}
+
 		stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
 
 		paymentIntentParams := &stripe.PaymentIntentParams {
@@ -229,6 +238,16 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 					paymentResponse.Message = "please refer to next action and status"
 				}
 			}
+		}
+
+		createPaymentLogsParams.Status = paymentResponse.Status
+		createPaymentLogsParams.Description = common.StringToNullString(paymentResponse.Message)
+		createPaymentLogsParams.PaymentIntentID = paymentIntentId
+
+		_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogsParams)
+
+		if createPaymentLogError != nil {
+			log.Printf("error: create payment log - %s", createPaymentLogError)
 		}
 	}
 	
