@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 const createPayment = `-- name: CreatePayment :one
@@ -50,6 +51,43 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.UserID,
 	)
 	return i, err
+}
+
+const getMultiplePayments = `-- name: GetMultiplePayments :many
+SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE id = ANY($1)
+`
+
+func (q *Queries) GetMultiplePayments(ctx context.Context, id []uuid.UUID) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, getMultiplePayments, pq.Array(id))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payment
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentIntentID,
+			&i.Amount,
+			&i.Currency,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPaymentAndReservationDetails = `-- name: GetPaymentAndReservationDetails :many

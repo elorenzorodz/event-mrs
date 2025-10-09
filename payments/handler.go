@@ -179,7 +179,6 @@ func ProcessRefund(db *database.Queries, ctx context.Context, paymentReservation
 	if len(reservationsToBeRefunded) == 0 {
 		return PaymentRefundResponse{}, fmt.Errorf("errors: \n%s", strings.Join(allErrors, ",\n"))
 	}
-
 	
 	userId, _ := uuid.Parse(paymentReservationDetails[0].UserID.String())
 

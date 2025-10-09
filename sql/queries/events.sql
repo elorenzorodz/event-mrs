@@ -47,7 +47,9 @@ SELECT
     p.id AS payment_id,
     p.payment_intent_id,
     p.amount,
-    p.status
+    p.status,
+	e.title,
+	SUM(ed.price) AS ticket_price 
 FROM events AS e
 JOIN event_details AS ed
     ON ed.event_id = e.id
@@ -58,4 +60,4 @@ JOIN payments AS p
 JOIN users AS u
     ON u.id = p.user_id
 WHERE e.id = @event_id::uuid AND e.user_id = @user_id::uuid
-GROUP BY p.id, p.payment_intent_id, p.amount, p.status;
+GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price;

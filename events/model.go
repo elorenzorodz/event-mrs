@@ -29,7 +29,7 @@ type SearchEvent struct {
 	Description       string    `json:"desription"`
 	Organizer         string    `json:"organizer"`
 	EventDetailID     uuid.UUID `json:"event_detail_id"`
-	ShowDate          string `json:"show_date"`
+	ShowDate          string    `json:"show_date"`
 	Price             float32   `json:"price"`
 	NumberOfTickets   int32     `json:"number_of_tickets"`
 	TicketDescription string    `json:"ticket_description"`
@@ -40,4 +40,15 @@ type EventParameters struct {
 	Description string                                `json:"description" binding:"required"`
 	Organizer   string                                `json:"organizer"`
 	Tickets     []event_details.EventDetailParameters `json:"tickets"  binding:"required"`
+}
+
+type EventFailedRefundOrCancel struct {
+	PaymentID           uuid.UUID                 `json:"payment_id"`
+	Action              string                    `json:"action"`
+	Code                string                    `json:"code"`
+	Message             string                    `json:"message"`
+}
+
+type FailedNotificationEmail struct {
+	SendRefundCancelNotificationError string `json:"send_refund_cancel_notification_error"`
 }

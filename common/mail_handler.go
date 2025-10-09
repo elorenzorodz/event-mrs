@@ -9,7 +9,7 @@ import (
 	"github.com/mailgun/mailgun-go/v4"
 )
 
-func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) {
+func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) error {
 	mailgunSendingDomain := GetEnvVariable("")
 	mailgunAPIKey := GetEnvVariable("")
 
@@ -33,5 +33,9 @@ func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eve
 	
 	if sendError != nil {
 		log.Printf("Mailgun send error | ID: %s | Message: %s | Error: %s", id, sendMessage, sendError)
+
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", senderName, senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
 	}
+
+	return nil
 }

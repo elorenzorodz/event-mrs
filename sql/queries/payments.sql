@@ -79,3 +79,6 @@ DELETE FROM reservations
 WHERE id = @reservation_id::uuid
 	AND EXISTS (SELECT 1 FROM event_details_update)
 	AND EXISTS (SELECT 1 FROM payment_update);
+
+-- name: GetMultiplePayments :many
+SELECT * FROM payments WHERE id = ANY($1);

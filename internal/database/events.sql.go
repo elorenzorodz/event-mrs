@@ -147,7 +147,9 @@ SELECT
     p.id AS payment_id,
     p.payment_intent_id,
     p.amount,
-    p.status
+    p.status,
+	e.title,
+	SUM(ed.price) AS ticket_price 
 FROM events AS e
 JOIN event_details AS ed
     ON ed.event_id = e.id
@@ -158,7 +160,7 @@ JOIN payments AS p
 JOIN users AS u
     ON u.id = p.user_id
 WHERE e.id = $1::uuid AND e.user_id = $2::uuid
-GROUP BY p.id, p.payment_intent_id, p.amount, p.status
+GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price
 `
 
 type GetPaidEventForRefundParams struct {
@@ -171,6 +173,8 @@ type GetPaidEventForRefundRow struct {
 	PaymentIntentID sql.NullString
 	Amount          string
 	Status          string
+	Title           string
+	TicketPrice     string
 }
 
 func (q *Queries) GetPaidEventForRefund(ctx context.Context, arg GetPaidEventForRefundParams) ([]GetPaidEventForRefundRow, error) {
@@ -187,6 +191,8 @@ func (q *Queries) GetPaidEventForRefund(ctx context.Context, arg GetPaidEventFor
 			&i.PaymentIntentID,
 			&i.Amount,
 			&i.Status,
+			&i.Title,
+			&i.TicketPrice,
 		); err != nil {
 			return nil, err
 		}
