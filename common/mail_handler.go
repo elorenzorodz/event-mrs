@@ -21,8 +21,12 @@ func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eve
 	mailgunMessage := mailgun.NewMessage(
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		fmt.Sprintf("Your payment for %s was refunded/cancelled", eventTitle),
-		fmt.Sprintf(`Hi %s, \n\nThe event: %s, that you booked was cancelled and your payment for the refunded. 
-		If you didn't pay yet, the pending payment is now cancelled.`, recipientName, eventTitle),
+		fmt.Sprintf(`Hi %s,
+						The event: %s, that you booked was cancelled and your payment was refunded. 
+						If you didn't pay yet, the pending payment is now cancelled.
+						Sorry for the inconvencience.
+						
+						- Event - MRS Team`, recipientName, eventTitle),
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 

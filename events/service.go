@@ -227,6 +227,16 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 		return
 	}
 
+	userEmail := ginContext.MustGet("email").(string)
+
+	eventFailedRefundOrCancels, failedNotificationEmails, refundCancelPaymentErrors := RefundOrCancelPayment(eventAPIConfig.DB, ginContext.Request.Context(), eventId, userId, userEmail)
+
+	if refundCancelPaymentErrors != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": refundCancelPaymentErrors})
+
+		return
+	}
+
 	deleteEventParams := database.DeleteEventParams {
 		ID:     eventId,
 		UserID: userId,
@@ -236,6 +246,12 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 
 	if deleteEventError != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error deleting event, please try again in a few minutes"})
+
+		return
+	}
+
+	if eventFailedRefundOrCancels != nil || failedNotificationEmails != nil {
+		ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully", "payments_failed_refund_or_cancelled": eventFailedRefundOrCancels, "failed_refund_cancelled_notif_emails": failedNotificationEmails})
 
 		return
 	}

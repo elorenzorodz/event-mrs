@@ -180,11 +180,11 @@ func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uu
 		waitGroup.Go(func() {
 			eventFailedRefundOrCancel := EventFailedRefundOrCancel{}
 
-			updatePaymentParams := database.UpdatePaymentParams {
-				ID: paidEventForRefund.PaymentID,
-				Amount: fmt.Sprintf("%.2f", float64(amount)/100.0),
+			updatePaymentParams := database.UpdatePaymentParams{
+				ID:              paidEventForRefund.PaymentID,
+				Amount:          fmt.Sprintf("%.2f", float64(amount)/100.0),
 				PaymentIntentID: paidEventForRefund.PaymentIntentID,
-				UserID: userId,
+				UserID:          userId,
 			}
 
 			createPaymentLogParams := database.CreatePaymentLogParams{
@@ -293,7 +293,7 @@ func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uu
 	payments, _ := db.GetMultiplePayments(ctx, PaymentIDs)
 
 	var (
-		sendRefundCanceWaitGroup 				 sync.WaitGroup
+		sendRefundCanceWaitGroup          sync.WaitGroup
 		sendRefundCancelNotifErrorChannel = make(chan error, len(payments))
 	)
 
@@ -329,7 +329,7 @@ func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uu
 
 	for errorMessage := range sendRefundCancelNotifErrorChannel {
 		if errorMessage != nil {
-			failedNotificationEmail := FailedNotificationEmail {
+			failedNotificationEmail := FailedNotificationEmail{
 				SendRefundCancelNotificationError: errorMessage.Error(),
 			}
 
