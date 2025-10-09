@@ -10,11 +10,11 @@ import (
 )
 
 func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) error {
-	mailgunSendingDomain := GetEnvVariable("")
-	mailgunAPIKey := GetEnvVariable("")
+	mailgunSendingDomain := GetEnvVariable("MAILGUN_SENDING_DOMAIN")
+	mailgunAPIKey := GetEnvVariable("MAILGUN_API_KEY")
 
-	senderName := GetEnvVariable("")
-	senderEmail := GetEnvVariable("")
+	senderName := GetEnvVariable("SENDER_NAME")
+	senderEmail := GetEnvVariable("SENDER_EMAIL")
 
 	mg := mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
 
