@@ -84,7 +84,10 @@ func ProcessExpiredPayment(payment *database.Payment, db *database.Queries, ctx 
 				_, paymentIntentCancelError := paymentintent.Cancel(payment.PaymentIntentID.String, paymentIntentCancelParams)
 
 				if paymentIntentCancelError != nil {
-					log.Printf("error payment intent cancel: %s", paymentIntentCancelError)
+					if stripeError, ok := paymentIntentCancelError.(*stripe.Error); ok {
+						createPaymentLogParams.Status = string(stripeError.Code)
+						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+					}
 				} else {
 					createPaymentLogParams.Status = "cancelled"
 					createPaymentLogParams.Description = common.StringToNullString("payment expired")
