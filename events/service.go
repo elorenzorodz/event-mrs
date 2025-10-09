@@ -250,8 +250,8 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 		return
 	}
 
-	if eventFailedRefundOrCancels != nil || failedNotificationEmails != nil {
-		ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully", "payments_failed_refund_or_cancelled": eventFailedRefundOrCancels, "failed_refund_cancelled_notif_emails": failedNotificationEmails})
+	if len(eventFailedRefundOrCancels) != 0 || len(failedNotificationEmails) != 0 {
+		ginContext.JSON(http.StatusMultiStatus, gin.H{"message": "event deleted successfully", "payments_failed_refund_or_cancelled": eventFailedRefundOrCancels, "failed_refund_cancelled_notif_emails": failedNotificationEmails})
 
 		return
 	}
