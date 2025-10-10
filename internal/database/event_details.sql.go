@@ -126,6 +126,46 @@ func (q *Queries) GetEventDetailsById(ctx context.Context, id uuid.UUID) (EventD
 	return i, err
 }
 
+const gethEventDetailsWithTitleByIds = `-- name: GethEventDetailsWithTitleByIds :many
+SELECT 
+	e.title,
+	ed.ticket_description,
+	ed.show_date
+FROM event_details AS ed
+JOIN events AS e
+	ON e.id = ed.event_id
+WHERE ed.id = ANY($1)
+`
+
+type GethEventDetailsWithTitleByIdsRow struct {
+	Title             string
+	TicketDescription string
+	ShowDate          time.Time
+}
+
+func (q *Queries) GethEventDetailsWithTitleByIds(ctx context.Context, id []uuid.UUID) ([]GethEventDetailsWithTitleByIdsRow, error) {
+	rows, err := q.db.QueryContext(ctx, gethEventDetailsWithTitleByIds, pq.Array(id))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GethEventDetailsWithTitleByIdsRow
+	for rows.Next() {
+		var i GethEventDetailsWithTitleByIdsRow
+		if err := rows.Scan(&i.Title, &i.TicketDescription, &i.ShowDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateEventDetail = `-- name: UpdateEventDetail :one
 UPDATE event_details
 SET show_date = $1, price = $2, number_of_tickets = $3, ticket_description = $4, updated_at = NOW()

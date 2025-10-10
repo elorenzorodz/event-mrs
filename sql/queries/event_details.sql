@@ -23,3 +23,13 @@ RETURNING id, show_date, price, number_of_tickets, tickets_remaining, ticket_des
 
 -- name: GetEventDetailsById :one
 SELECT * FROM event_details WHERE id = $1;
+
+-- name: GethEventDetailsWithTitleByIds :many
+SELECT 
+	e.title,
+	ed.ticket_description,
+	ed.show_date
+FROM event_details AS ed
+JOIN events AS e
+	ON e.id = ed.event_id
+WHERE ed.id = ANY($1);

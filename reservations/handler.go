@@ -184,7 +184,7 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 	paymentIntentId := ""
 	paymentResponse := payments.PaymentResponse{
 		ID: userPayment.ID,
-		ExpiresAt: userPayment.ExpiresAt,
+		ExpiresAt: userPayment.ExpiresAt,		
 	}
 
 	if totalPrice > 0 {
@@ -249,6 +249,8 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		if createPaymentLogError != nil {
 			log.Printf("error: create payment log - %s", createPaymentLogError)
 		}
+	} else {
+		paymentResponse.Status = string(stripe.PaymentIntentStatusSucceeded)
 	}
 	
 	if paymentResponse.Status != string(stripe.PaymentIntentStatusSucceeded) {
@@ -278,7 +280,19 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 				paymentResponse.Message = "please submit new payment method"
 		}
 	} else {
-		// TODO: Send email for payment confirmation with ticket reservations.
+		user, _ := db.GetUserById(ctx, userId)
+
+		fullName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
+
+		eventDetailIds := []uuid.UUID{}
+
+		for _, reservation := range newReservations {
+			eventDetailIds = append(eventDetailIds, reservation.EventDetailID)
+		}
+		
+		eventDetailsWithEventTitle, _ := db.GethEventDetailsWithTitleByIds(ctx, eventDetailIds)
+
+		common.SendPaymentConfirmationAndTicketReservation(fullName, userEmail, eventDetailsWithEventTitle)
 	}
 
 	updatePaymentParams := database.UpdatePaymentParams {
