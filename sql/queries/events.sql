@@ -61,3 +61,21 @@ JOIN users AS u
     ON u.id = p.user_id
 WHERE e.id = @event_id::uuid AND e.user_id = @user_id::uuid
 GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price;
+
+-- name: GetEventConfirmedUserReservations :many
+SELECT 
+	p.user_id,
+	CONCAT(u.firstName, ' ', u.lastName) AS fullName, 
+	u.email
+FROM events as e
+JOIN event_details AS ed
+	ON ed.event_id = e.id
+JOIN reservations AS r
+	ON r.event_detail_id = ed.id
+JOIN payments AS p
+	ON p.id = r.payment_id
+JOIN users AS u
+	ON u.id = p.user_id 
+WHERE e.id = $1
+	AND p.status = 'succeeded'
+GROUP BY p.user_id, u.firstName, u.lastName, u.email;

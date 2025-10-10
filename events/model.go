@@ -35,11 +35,17 @@ type SearchEvent struct {
 	TicketDescription string    `json:"ticket_description"`
 }
 
+type UpdateEventParameters struct {
+	Title       string                                `json:"title" binding:"required"`
+	Description string                                `json:"description" binding:"required"`
+	Organizer   string                                `json:"organizer"`
+}
+
 type EventParameters struct {
 	Title       string                                `json:"title" binding:"required"`
 	Description string                                `json:"description" binding:"required"`
 	Organizer   string                                `json:"organizer"`
-	Tickets     []event_details.EventDetailParameters `json:"tickets"  binding:"required"`
+	Tickets     []event_details.EventDetailParameters `json:"tickets" binding:"required"`
 }
 
 type EventFailedRefundOrCancel struct {

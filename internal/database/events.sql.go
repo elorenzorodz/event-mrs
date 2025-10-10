@@ -62,6 +62,54 @@ func (q *Queries) DeleteEvent(ctx context.Context, arg DeleteEventParams) error 
 	return err
 }
 
+const getEventConfirmedUserReservations = `-- name: GetEventConfirmedUserReservations :many
+SELECT 
+	p.user_id,
+	CONCAT(u.firstName, ' ', u.lastName) AS fullName, 
+	u.email
+FROM events as e
+JOIN event_details AS ed
+	ON ed.event_id = e.id
+JOIN reservations AS r
+	ON r.event_detail_id = ed.id
+JOIN payments AS p
+	ON p.id = r.payment_id
+JOIN users AS u
+	ON u.id = p.user_id 
+WHERE e.id = $1
+	AND p.status = 'succeeded'
+GROUP BY p.user_id, u.firstName, u.lastName, u.email
+`
+
+type GetEventConfirmedUserReservationsRow struct {
+	UserID   uuid.UUID
+	Fullname sql.NullString
+	Email    string
+}
+
+func (q *Queries) GetEventConfirmedUserReservations(ctx context.Context, id uuid.UUID) ([]GetEventConfirmedUserReservationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getEventConfirmedUserReservations, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEventConfirmedUserReservationsRow
+	for rows.Next() {
+		var i GetEventConfirmedUserReservationsRow
+		if err := rows.Scan(&i.UserID, &i.Fullname, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEvents = `-- name: GetEvents :many
 SELECT 
 	e.id AS event_id,

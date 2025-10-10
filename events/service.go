@@ -174,10 +174,10 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	eventParams := EventParameters{}
+	upddateEventParams := UpdateEventParameters{}
 
 	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&eventParams); parameterBindError != nil {
+	if parameterBindError := ginContext.ShouldBindJSON(&upddateEventParams); parameterBindError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
 
 		return
@@ -191,11 +191,11 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 		return
 	}
 
-	updateEventParams := database.UpdateEventParams{
+	updateEventParams := database.UpdateEventParams {
 		ID:          eventId,
-		Title:       eventParams.Title,
-		Description: eventParams.Description,
-		Organizer:   common.StringToNullString(eventParams.Organizer),
+		Title:       upddateEventParams.Title,
+		Description: upddateEventParams.Description,
+		Organizer:   common.StringToNullString(upddateEventParams.Organizer),
 		UserID:      userId,
 	}
 
@@ -205,6 +205,20 @@ func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error updating event, please try again in a few minutes"})
 
 		return
+	}
+
+	eventConfirmedUserReservations, getEventConfirmedUserReservations := eventAPIConfig.DB.GetEventConfirmedUserReservations(ginContext.Request.Context(), eventId)
+
+	if getEventConfirmedUserReservations != nil {
+		log.Printf("error getting users reserved for the event")
+	}
+
+	for _, eventConfirmedUserReservation := range eventConfirmedUserReservations {
+		sendUpdatedEventNotificationError := common.SendUpdatedEventNotification(eventConfirmedUserReservation.Fullname.String, eventConfirmedUserReservation.Email, updatedEvent.Title, updatedEvent.Description, updatedEvent.Organizer.String)
+
+		if sendUpdatedEventNotificationError != nil {
+			log.Print("error sending updated event notification")
+		}
 	}
 
 	ginContext.JSON(http.StatusOK, gin.H{"event": DatabaseEventToEventJSON(updatedEvent, []event_details.EventDetail{})})

@@ -4,21 +4,28 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/mailgun/mailgun-go/v4"
 )
 
-var mailgunSendingDomain = GetEnvVariable("MAILGUN_SENDING_DOMAIN")
-var mailgunAPIKey = GetEnvVariable("MAILGUN_API_KEY")
+func initializeMailgun() (string, string, *mailgun.MailgunImpl){
+	mailgunSendingDomain := GetEnvVariable("MAILGUN_SENDING_DOMAIN")
+	mailgunAPIKey := GetEnvVariable("MAILGUN_API_KEY")
 
-var senderName = GetEnvVariable("SENDER_NAME")
-var senderEmail = GetEnvVariable("SENDER_EMAIL")
+	senderName := GetEnvVariable("SENDER_NAME")
+	senderEmail := GetEnvVariable("SENDER_EMAIL")
 
-var mg = mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
+	mg := mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
+
+	return senderName, senderEmail, mg
+}
 
 func SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+	senderName, senderEmail, mg := initializeMailgun()
+	
 	eventConcat := ""
 
 	for _, eventDetail := range eventDetailsWithEventTitle {
@@ -30,6 +37,7 @@ func SendPaymentConfirmationAndTicketReservation(recipientName string, recipient
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		"Your payment and ticket reservation is confirmed",
 		fmt.Sprintf(`Hi %s,
+		
 You've successfully booked your events. Enjoy!
 %s
 
@@ -52,10 +60,13 @@ You've successfully booked your events. Enjoy!
 }
 
 func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) error {
+	senderName, senderEmail, mg := initializeMailgun()
+
 	mailgunMessage := mailgun.NewMessage(
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		fmt.Sprintf("Your payment for %s was refunded/cancelled", eventTitle),
 		fmt.Sprintf(`Hi %s,
+
 The event: %s, that you booked was cancelled and your payment was refunded. 
 If you didn't pay yet, the pending payment is now cancelled.
 Sorry for the inconvencience.
@@ -79,6 +90,8 @@ Sorry for the inconvencience.
 }
 
 func SendRefundErrorNotification() error {
+	senderName, senderEmail, mg := initializeMailgun()
+
 	teamName := GetEnvVariable("TEAM_NAME")
 	teamEmail := GetEnvVariable("TEAM_EMAIL")
 
@@ -104,6 +117,8 @@ func SendRefundErrorNotification() error {
 }
 
 func SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+	senderName, senderEmail, mg := initializeMailgun()
+
 	eventConcat := ""
 
 	for _, eventDetail := range eventDetailsWithEventTitle {
@@ -115,12 +130,51 @@ func SendPaymentFailedNotification(recipientName string, recipientEmail string, 
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		"Your payment failed",
 		fmt.Sprintf(`Hi %s,
+
 Your payment failed with the following issue: %s
 
 Reservation/s attached with the payment:
 %s
 
 - Event - MRS Team`, recipientName, errorMessage, eventConcat),
+		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	defer cancel()
+
+	sendMessage, id, sendError := mg.Send(ctx, mailgunMessage)
+	
+	if sendError != nil {
+		log.Printf("Mailgun send error | ID: %s | Message: %s | Error: %s", id, sendMessage, sendError)
+
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", senderName, senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func SendUpdatedEventNotification(recipientName string, recipientEmail string, eventTitle string, eventDescription string, eventOrganizer string) error {
+	senderName, senderEmail, mg := initializeMailgun()
+
+	organizer := ""
+
+	if strings.TrimSpace(eventOrganizer) != "" {
+		organizer = eventOrganizer
+	}
+
+	mailgunMessage := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", senderName, senderEmail),
+		"Your booked event was updated",
+		fmt.Sprintf(`Hi %s,
+
+You are receiving this email because your booked event has been updated. Please refer to details below.
+
+Title: %s
+Description: %s
+%s
+
+- Event - MRS Team`, recipientName, eventTitle, eventDescription, organizer),
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 

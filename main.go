@@ -18,7 +18,6 @@ import (
 )
 
 func main() {
-	// TODO: Add email alert whenever the event is updated.
 	// TODO: Add email alert whenever the event detail is updated or deleted.
 
 	godotenv.Load(".env.dev")
