@@ -284,6 +284,32 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 		switch stripeEvent.Type {
 			case "payment_intent.succeeded":
 				// TODO: Send email notification with details of ticket reservations.
+
+				getUserReservationsByPaymentIdParams := database.GetUserReservationsByPaymentIdParams {
+					UserID: user.ID,
+					PaymentID: updatedPayment.ID,
+				}
+
+			 	userReservations, getUserReservationsByPaymentIdError := paymentAPIConfig.DB.GetUserReservationsByPaymentId(ginContext.Request.Context(), getUserReservationsByPaymentIdParams)
+
+				if getUserReservationsByPaymentIdError == nil {
+					eventDetailIds := []uuid.UUID{}
+
+					for _, userReservation := range userReservations {
+						eventDetailIds = append(eventDetailIds, userReservation.EventDetailID)
+					}
+
+					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GethEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
+
+					fullName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
+
+					sendEmailError := common.SendPaymentConfirmationAndTicketReservation(fullName, user.Email, eventDetailsWithEventTitle)
+
+					if sendEmailError != nil {
+						log.Printf("error sending confirmation email")
+					}
+				}
+
 				paymentResponse.Message = "payment succeeded"
 			
 			case "payment_intent.payment_failed":
