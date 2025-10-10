@@ -204,7 +204,12 @@ func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uu
 				refundResult, refundError := refund.New(refundParams)
 
 				if refundError != nil {
-					// TODO: Send email to team.
+					sendRefundErrorEmailError := common.SendRefundErrorNotification()
+
+					if sendRefundErrorEmailError != nil {
+						log.Printf("error sending refund error notification")
+					}
+					
 					if stripeError, ok := refundError.(*stripe.Error); ok {
 						createPaymentLogParams.Status = string(stripeError.Code)
 						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)

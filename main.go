@@ -18,7 +18,6 @@ import (
 )
 
 func main() {
-	// TODO: Send email confirmation for payment and reservation.
 	// TODO: Add email alert whenever the event is updated.
 	// TODO: Add email alert whenever the event detail is updated or deleted.
 

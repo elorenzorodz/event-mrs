@@ -292,7 +292,11 @@ func SaveReservations(db *database.Queries, ctx context.Context, userId uuid.UUI
 		
 		eventDetailsWithEventTitle, _ := db.GethEventDetailsWithTitleByIds(ctx, eventDetailIds)
 
-		common.SendPaymentConfirmationAndTicketReservation(fullName, userEmail, eventDetailsWithEventTitle)
+		sendEmailError := common.SendPaymentConfirmationAndTicketReservation(fullName, userEmail, eventDetailsWithEventTitle)
+
+		if sendEmailError != nil {
+			log.Printf("error sending confirmation email")
+		}
 	}
 
 	updatePaymentParams := database.UpdatePaymentParams {

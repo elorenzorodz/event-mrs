@@ -10,21 +10,21 @@ import (
 	"github.com/mailgun/mailgun-go/v4"
 )
 
+var mailgunSendingDomain = GetEnvVariable("MAILGUN_SENDING_DOMAIN")
+var mailgunAPIKey = GetEnvVariable("MAILGUN_API_KEY")
+
+var senderName = GetEnvVariable("SENDER_NAME")
+var senderEmail = GetEnvVariable("SENDER_EMAIL")
+
+var mg = mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
+
 func SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
-	mailgunSendingDomain := GetEnvVariable("MAILGUN_SENDING_DOMAIN")
-	mailgunAPIKey := GetEnvVariable("MAILGUN_API_KEY")
-
-	senderName := GetEnvVariable("SENDER_NAME")
-	senderEmail := GetEnvVariable("SENDER_EMAIL")
-
 	eventConcat := ""
 
 	for _, eventDetail := range eventDetailsWithEventTitle {
 		eventConcat += fmt.Sprintf(`%s - %s - %s
 `, eventDetail.Title, eventDetail.TicketDescription, eventDetail.ShowDate)
 	}
-
-	mg := mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
 
 	mailgunMessage := mailgun.NewMessage(
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
@@ -52,14 +52,6 @@ You've successfully booked your events. Enjoy!
 }
 
 func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) error {
-	mailgunSendingDomain := GetEnvVariable("MAILGUN_SENDING_DOMAIN")
-	mailgunAPIKey := GetEnvVariable("MAILGUN_API_KEY")
-
-	senderName := GetEnvVariable("SENDER_NAME")
-	senderEmail := GetEnvVariable("SENDER_EMAIL")
-
-	mg := mailgun.NewMailgun(mailgunSendingDomain, mailgunAPIKey)
-
 	mailgunMessage := mailgun.NewMessage(
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		fmt.Sprintf("Your payment for %s was refunded/cancelled", eventTitle),
@@ -81,6 +73,31 @@ Sorry for the inconvencience.
 		log.Printf("Mailgun send error | ID: %s | Message: %s | Error: %s", id, sendMessage, sendError)
 
 		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", senderName, senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func SendRefundErrorNotification() error {
+	teamName := GetEnvVariable("TEAM_NAME")
+	teamEmail := GetEnvVariable("TEAM_EMAIL")
+
+	mailgunMessage := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", senderName, senderEmail),
+		"A refund request has failed",
+		"A refund request has failed. Please check logs.",
+		fmt.Sprintf("%s <%s>", teamName, teamEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	defer cancel()
+
+	sendMessage, id, sendError := mg.Send(ctx, mailgunMessage)
+	
+	if sendError != nil {
+		log.Printf("Mailgun send error | ID: %s | Message: %s | Error: %s", id, sendMessage, sendError)
+
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", senderName, senderEmail, teamName, teamEmail, id, sendMessage, sendError)
 	}
 
 	return nil
