@@ -283,8 +283,6 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 
 		switch stripeEvent.Type {
 			case "payment_intent.succeeded":
-				// TODO: Send email notification with details of ticket reservations.
-
 				getUserReservationsByPaymentIdParams := database.GetUserReservationsByPaymentIdParams {
 					UserID: user.ID,
 					PaymentID: updatedPayment.ID,
@@ -313,8 +311,32 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 				paymentResponse.Message = "payment succeeded"
 			
 			case "payment_intent.payment_failed":
-				// TODO: Notify user of failed payment.
 				paymentResponse.Message = paymentIntent.LastPaymentError.Msg
+
+				getUserReservationsByPaymentIdParams := database.GetUserReservationsByPaymentIdParams {
+					UserID: user.ID,
+					PaymentID: updatedPayment.ID,
+				}
+
+			 	userReservations, getUserReservationsByPaymentIdError := paymentAPIConfig.DB.GetUserReservationsByPaymentId(ginContext.Request.Context(), getUserReservationsByPaymentIdParams)
+
+				if getUserReservationsByPaymentIdError == nil {
+					eventDetailIds := []uuid.UUID{}
+
+					for _, userReservation := range userReservations {
+						eventDetailIds = append(eventDetailIds, userReservation.EventDetailID)
+					}
+
+					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GethEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
+
+					fullName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
+
+					sendEmailError := common.SendPaymentFailedNotification(fullName, user.Email, paymentResponse.Message, eventDetailsWithEventTitle)
+
+					if sendEmailError != nil {
+						log.Printf("error sending confirmation email")
+					}
+				}
 
 			case "payment_intent.requires_action":
 				paymentResponse.ClientSecret = paymentIntent.ClientSecret

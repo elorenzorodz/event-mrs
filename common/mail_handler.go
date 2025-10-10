@@ -102,3 +102,38 @@ func SendRefundErrorNotification() error {
 
 	return nil
 }
+
+func SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+	eventConcat := ""
+
+	for _, eventDetail := range eventDetailsWithEventTitle {
+		eventConcat += fmt.Sprintf(`%s - %s - %s
+`, eventDetail.Title, eventDetail.TicketDescription, eventDetail.ShowDate)
+	}
+
+	mailgunMessage := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", senderName, senderEmail),
+		"Your payment failed",
+		fmt.Sprintf(`Hi %s,
+Your payment failed with the following issue: %s
+
+Reservation/s attached with the payment:
+%s
+
+- Event - MRS Team`, recipientName, errorMessage, eventConcat),
+		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	defer cancel()
+
+	sendMessage, id, sendError := mg.Send(ctx, mailgunMessage)
+	
+	if sendError != nil {
+		log.Printf("Mailgun send error | ID: %s | Message: %s | Error: %s", id, sendMessage, sendError)
+
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", senderName, senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
