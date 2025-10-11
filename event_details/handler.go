@@ -221,16 +221,17 @@ func EventDetailRefundOrCancelPayment(db *database.Queries, ctx context.Context,
 			}
 
 			eventTitle := paidEventDetailForRefunds[0].Title
+			ticketDescription := paidEventDetailForRefunds[0].TicketDescription
 
 			recipientName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
 
 			refundOrCancelledNotifMessage := fmt.Sprintf(`Hi %s,
 
-The event reservation you've booked: %s, was cancelled and your payment was refunded. 
+The event reservation you've booked: %s - %s, was cancelled and your payment was refunded. 
 If you didn't pay yet, the pending payment is now cancelled.
 Sorry for the inconvencience.
 
-- Event - MRS Team`, recipientName, eventTitle)
+- Event - MRS Team`, recipientName, eventTitle, ticketDescription)
 
 			sendRefundCancelError := common.SendRefundOrCancelledEmail(recipientName, user.Email, eventTitle, refundOrCancelledNotifMessage)
 
