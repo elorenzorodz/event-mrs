@@ -133,7 +133,7 @@ func SaveEventTickets(db *database.Queries, ctx context.Context, eventId uuid.UU
 	return newTickets, nil
 }
 
-func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uuid.UUID, userId uuid.UUID, userEmail string) ([]EventFailedRefundOrCancel, []FailedNotificationEmail, error) {
+func EventRefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uuid.UUID, userId uuid.UUID, userEmail string) ([]EventFailedRefundOrCancel, []FailedNotificationEmail, error) {
 	getPaidEventForRefundParams := database.GetPaidEventForRefundParams{
 		EventID: eventId,
 		UserID:  userId,
@@ -146,7 +146,7 @@ func RefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uu
 	}
 
 	if len(paidEventForRefunds) == 0 {
-		return []EventFailedRefundOrCancel{}, []FailedNotificationEmail{}, fmt.Errorf("no tickets reserved for this event")
+		return []EventFailedRefundOrCancel{}, []FailedNotificationEmail{}, nil
 	}
 
 	var (

@@ -243,7 +243,8 @@ func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
 
 	userEmail := ginContext.MustGet("email").(string)
 
-	eventFailedRefundOrCancels, failedNotificationEmails, refundCancelPaymentErrors := RefundOrCancelPayment(eventAPIConfig.DB, ginContext.Request.Context(), eventId, userId, userEmail)
+	// Process refund and/or cancel Stripe payments before deleting event.
+	eventFailedRefundOrCancels, failedNotificationEmails, refundCancelPaymentErrors := EventRefundOrCancelPayment(eventAPIConfig.DB, ginContext.Request.Context(), eventId, userId, userEmail)
 
 	if refundCancelPaymentErrors != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": refundCancelPaymentErrors})
