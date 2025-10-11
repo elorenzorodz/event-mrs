@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -124,6 +125,71 @@ func (q *Queries) GetEventDetailsById(ctx context.Context, id uuid.UUID) (EventD
 		&i.EventID,
 	)
 	return i, err
+}
+
+const getPaidEventDetailForRefund = `-- name: GetPaidEventDetailForRefund :many
+SELECT
+    p.id AS payment_id,
+    p.payment_intent_id,
+    p.amount,
+    p.status,
+	e.title,
+	SUM(ed.price) AS ticket_price 
+FROM events AS e
+JOIN event_details AS ed
+    ON ed.event_id = e.id
+JOIN reservations AS r
+    ON r.event_detail_id = ed.id
+JOIN payments AS p
+    ON p.id = r.payment_id
+JOIN users AS u
+    ON u.id = p.user_id
+WHERE ed.id = $1::uuid AND e.user_id = $2::uuid
+GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price
+`
+
+type GetPaidEventDetailForRefundParams struct {
+	EventDetailID uuid.UUID
+	UserID        uuid.UUID
+}
+
+type GetPaidEventDetailForRefundRow struct {
+	PaymentID       uuid.UUID
+	PaymentIntentID sql.NullString
+	Amount          string
+	Status          string
+	Title           string
+	TicketPrice     string
+}
+
+func (q *Queries) GetPaidEventDetailForRefund(ctx context.Context, arg GetPaidEventDetailForRefundParams) ([]GetPaidEventDetailForRefundRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPaidEventDetailForRefund, arg.EventDetailID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPaidEventDetailForRefundRow
+	for rows.Next() {
+		var i GetPaidEventDetailForRefundRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.PaymentIntentID,
+			&i.Amount,
+			&i.Status,
+			&i.Title,
+			&i.TicketPrice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const gethEventDetailsWithTitleByIds = `-- name: GethEventDetailsWithTitleByIds :many

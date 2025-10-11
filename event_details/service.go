@@ -32,23 +32,23 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 	if parseShowDateError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
-		
+
 		return
 	}
 
-	createEventDetailParams := database.CreateEventDetailParams {
-		ID: uuid.New(),
-		ShowDate: showDate,
-		Price: fmt.Sprintf("%.2f", eventDetailParams.Price),
-		NumberOfTickets: eventDetailParams.NumberOfTickets,
+	createEventDetailParams := database.CreateEventDetailParams{
+		ID:                uuid.New(),
+		ShowDate:          showDate,
+		Price:             fmt.Sprintf("%.2f", eventDetailParams.Price),
+		NumberOfTickets:   eventDetailParams.NumberOfTickets,
 		TicketDescription: eventDetailParams.TicketDescription,
-		EventID: eventId,
+		EventID:           eventId,
 	}
 
 	newEventDetail, createEventDetailError := eventDetailAPIConfig.DB.CreateEventDetail(ginContext.Request.Context(), createEventDetailParams)
 
 	if createEventDetailError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error" : "error creating event detail, please try again in a few minutes"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error creating event detail, please try again in a few minutes"})
 
 		return
 	}
@@ -86,23 +86,23 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) UpdateEventDetail(ginContext *
 
 	if parseShowDateError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
-		
+
 		return
 	}
 
-	updateEventDetailParams := database.UpdateEventDetailParams {
-		ID: eventDetailId,
-		ShowDate: showDate,
-		Price: fmt.Sprintf("%.2f", eventDetailParams.Price),
-		NumberOfTickets: eventDetailParams.NumberOfTickets,
+	updateEventDetailParams := database.UpdateEventDetailParams{
+		ID:                eventDetailId,
+		ShowDate:          showDate,
+		Price:             fmt.Sprintf("%.2f", eventDetailParams.Price),
+		NumberOfTickets:   eventDetailParams.NumberOfTickets,
 		TicketDescription: eventDetailParams.TicketDescription,
-		EventID: eventId,
+		EventID:           eventId,
 	}
 
 	updatedEventDetail, updateEventDetailError := eventDetailAPIConfig.DB.UpdateEventDetail(ginContext.Request.Context(), updateEventDetailParams)
 
 	if updateEventDetailError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error" : "error updating event detail, please try again in a few minutes"})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error updating event detail, please try again in a few minutes"})
 
 		return
 	}
@@ -127,8 +127,27 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) DeleteEventDetail(ginContext *
 		return
 	}
 
+	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
+
+	if parseUserIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+
+		return
+	}
+
+	userEmail := ginContext.MustGet("email").(string)
+
+	// Process refund and/or cancel Stripe payments before deleting event detail.
+	eventDetailFailedRefundOrCancels, failedNotificationEmails, refundCancelPaymentErrors := EventDetailRefundOrCancelPayment(eventDetailAPIConfig.DB, ginContext.Request.Context(), eventDetailId, userId, userEmail)
+
+	if refundCancelPaymentErrors != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": refundCancelPaymentErrors})
+
+		return
+	}
+
 	deleteEventDetailParams := database.DeleteEventDetailParams{
-		ID:     eventDetailId,
+		ID:      eventDetailId,
 		EventID: eventId,
 	}
 
@@ -136,6 +155,16 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) DeleteEventDetail(ginContext *
 
 	if deleteEventError != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error deleting event detail, please try again in a few minutes"})
+
+		return
+	}
+
+	if len(eventDetailFailedRefundOrCancels) != 0 || len(failedNotificationEmails) != 0 {
+		ginContext.JSON(http.StatusMultiStatus,
+			gin.H{
+				"message":                              "event detail deleted successfully",
+				"payments_failed_refund_or_cancelled":  eventDetailFailedRefundOrCancels,
+				"failed_refund_cancelled_notif_emails": failedNotificationEmails})
 
 		return
 	}

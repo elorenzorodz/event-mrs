@@ -33,3 +33,23 @@ FROM event_details AS ed
 JOIN events AS e
 	ON e.id = ed.event_id
 WHERE ed.id = ANY($1);
+
+-- name: GetPaidEventDetailForRefund :many
+SELECT
+    p.id AS payment_id,
+    p.payment_intent_id,
+    p.amount,
+    p.status,
+	e.title,
+	SUM(ed.price) AS ticket_price 
+FROM events AS e
+JOIN event_details AS ed
+    ON ed.event_id = e.id
+JOIN reservations AS r
+    ON r.event_detail_id = ed.id
+JOIN payments AS p
+    ON p.id = r.payment_id
+JOIN users AS u
+    ON u.id = p.user_id
+WHERE ed.id = @event_detail_id::uuid AND e.user_id = @user_id::uuid
+GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price;

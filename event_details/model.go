@@ -29,3 +29,14 @@ type EventDetailParameters struct {
 	Price             float32 `json:"price"`
 	NumberOfTickets   int32   `json:"number_of_tickets" binding:"required"`
 }
+
+type EventDetailFailedRefundOrCancel struct {
+	PaymentID           uuid.UUID                 `json:"payment_id"`
+	Action              string                    `json:"action"`
+	Code                string                    `json:"code"`
+	Message             string                    `json:"message"`
+}
+
+type FailedNotificationEmail struct {
+	SendRefundCancelNotificationError string `json:"send_refund_cancel_notification_error"`
+}
