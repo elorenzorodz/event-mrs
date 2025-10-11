@@ -37,7 +37,7 @@ func SendPaymentConfirmationAndTicketReservation(recipientName string, recipient
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		"Your payment and ticket reservation is confirmed",
 		fmt.Sprintf(`Hi %s,
-		
+
 You've successfully booked your events. Enjoy!
 %s
 
@@ -59,19 +59,13 @@ You've successfully booked your events. Enjoy!
 	return nil
 }
 
-func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string) error {
+func SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string, message string) error {
 	senderName, senderEmail, mg := initializeMailgun()
 
 	mailgunMessage := mailgun.NewMessage(
 		fmt.Sprintf("%s <%s>", senderName, senderEmail),
 		fmt.Sprintf("Your payment for %s was refunded/cancelled", eventTitle),
-		fmt.Sprintf(`Hi %s,
-
-The event: %s, that you booked was cancelled and your payment was refunded. 
-If you didn't pay yet, the pending payment is now cancelled.
-Sorry for the inconvencience.
-
-- Event - MRS Team`, recipientName, eventTitle),
+		message,
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 
