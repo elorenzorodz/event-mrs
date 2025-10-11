@@ -258,7 +258,7 @@ func EventRefundOrCancelPayment(db *database.Queries, ctx context.Context, event
 				} else {
 					updatePaymentParams.Status = "cancelled"
 					createPaymentLogParams.Status = "cancelled"
-					createPaymentLogParams.Description = common.StringToNullString("payment expired")
+					createPaymentLogParams.Description = common.StringToNullString("event deleted")
 				}
 			}
 
