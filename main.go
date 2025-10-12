@@ -83,6 +83,7 @@ func main() {
 	}
 
 	routerAPIPrefix.POST("/payments/webhook", paymentAPIConfig.StripeWebhook)
+	routerAPIPrefix.POST("/payments/refund-webhook", paymentAPIConfig.StripeRefundWebhook)
 	routerWithAuthorization.GET("/payments", paymentAPIConfig.GetUserPayments)
 	routerWithAuthorization.GET("/payments/:paymentId", paymentAPIConfig.GetUserPaymentById)
 	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)

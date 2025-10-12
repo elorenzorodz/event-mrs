@@ -219,6 +219,27 @@ func (q *Queries) GetPaymentByIdOnly(ctx context.Context, id uuid.UUID) (Payment
 	return i, err
 }
 
+const getPaymentByPaymentIntentId = `-- name: GetPaymentByPaymentIntentId :one
+SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE payment_intent_id = $1
+`
+
+func (q *Queries) GetPaymentByPaymentIntentId(ctx context.Context, paymentIntentID sql.NullString) (Payment, error) {
+	row := q.db.QueryRowContext(ctx, getPaymentByPaymentIntentId, paymentIntentID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentIntentID,
+		&i.Amount,
+		&i.Currency,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+	)
+	return i, err
+}
+
 const getUserPayments = `-- name: GetUserPayments :many
 SELECT id, payment_intent_id, amount, currency, status, expires_at, created_at, updated_at, user_id FROM payments WHERE user_id = $1
 `

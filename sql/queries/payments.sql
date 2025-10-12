@@ -82,3 +82,6 @@ WHERE id = @reservation_id::uuid
 
 -- name: GetMultiplePayments :many
 SELECT * FROM payments WHERE id = ANY($1);
+
+-- name: GetPaymentByPaymentIntentId :one
+SELECT * FROM payments WHERE payment_intent_id = $1;

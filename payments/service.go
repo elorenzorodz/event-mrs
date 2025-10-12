@@ -467,3 +467,110 @@ func (paymentAPIConfig *PaymentAPIConfig) RefundPayment(ginContext *gin.Context)
 
 	ginContext.JSON(http.StatusOK, gin.H{"payment_refund": paymentRefundResponse})
 }
+
+func (paymentAPIConfig *PaymentAPIConfig) StripeRefundWebhook(ginContext *gin.Context) {
+	const MaxBodyBytes = int64(65536)
+	ginContext.Request.Body = http.MaxBytesReader(ginContext.Writer, ginContext.Request.Body, MaxBodyBytes)
+
+	payload, readPayloadError := io.ReadAll(ginContext.Request.Body)
+
+	if readPayloadError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to read stripe webhook request body"})
+
+		return
+	}
+
+	stripeSignature := ginContext.GetHeader("Stripe-Signature")
+
+	if strings.TrimSpace(stripeSignature) == "" {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "missing Stripe-Signature header"})
+
+		return
+	}
+
+	stripeSigningSecret := strings.TrimSpace(common.GetEnvVariable("STRIPE_REFUND_SIGNING_SECRET"))
+
+	stripeEvent, signatureVerificationError := webhook.ConstructEvent(payload, stripeSignature, stripeSigningSecret)
+
+	if signatureVerificationError != nil {
+		log.Printf("%s", signatureVerificationError)
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "stripe signature verification failed"})
+
+		return
+	}
+
+	paymentRefundResponse := PaymentRefundResponse {
+		PaymentRefunds: []PaymentRefunded {},
+	}
+
+	createPaymentLogParams := database.CreatePaymentLogParams{ ID: uuid.New() }
+
+	switch stripeEvent.Type {
+		case "charge.refunded":
+			var charge stripe.Charge
+
+			unmarshalChargeError := json.Unmarshal(stripeEvent.Data.Raw, &charge)
+
+			if unmarshalChargeError != nil {
+				ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse charge"})
+
+				return
+			}
+
+			payment, getPaymentByPaymentIntentIdError := paymentAPIConfig.DB.GetPaymentByPaymentIntentId(ginContext.Request.Context(), common.StringToNullString(charge.PaymentIntent.ID))
+
+			if getPaymentByPaymentIntentIdError != nil {
+				ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get payment details"})
+
+				return
+			}
+
+			if payment.Status == "refund pending" {
+				
+				updatePaymentParams := database.UpdatePaymentParams {
+					ID: payment.ID,
+					PaymentIntentID: payment.PaymentIntentID,
+					Amount: "0.00",
+					Status: "refunded",
+					UserID: payment.UserID,
+				}
+
+				_, updatePaymentError := paymentAPIConfig.DB.UpdatePayment(ginContext.Request.Context(), updatePaymentParams)
+
+				if updatePaymentError != nil {
+					ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment"})
+
+					return
+				}
+
+				user, getUserByIdError := paymentAPIConfig.DB.GetUserById(ginContext.Request.Context(), payment.UserID)
+
+				if getUserByIdError != nil {
+					ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+
+					return
+				}
+
+				paymentRefunded := PaymentRefunded {
+					PaymentID: payment.ID,
+					Amount: fmt.Sprintf("%.2f", float64(charge.AmountRefunded)/100.0),
+				}
+				
+				paymentRefundResponse.Message = "refund successful"
+				paymentRefundResponse.PaymentRefunds = append(paymentRefundResponse.PaymentRefunds, paymentRefunded)
+
+				createPaymentLogParams.PaymentIntentID = charge.PaymentIntent.ID
+				createPaymentLogParams.Amount = fmt.Sprintf("%.2f", float64(charge.AmountRefunded)/100.0)
+				createPaymentLogParams.UserEmail = user.Email
+				createPaymentLogParams.PaymentID = payment.ID
+			}
+	}
+
+	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogParams)
+
+	if createPaymentLogError != nil {
+		log.Printf("error: %s", createPaymentLogError)
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"payment_refund": paymentRefundResponse})
+}
