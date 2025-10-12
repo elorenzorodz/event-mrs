@@ -507,9 +507,9 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeRefundWebhook(ginContext *gin.Co
 
 	switch stripeEvent.Type {
 		case "charge.refunded":
-			var charge stripe.Charge
+			var stripeCharge stripe.Charge
 
-			unmarshalChargeError := json.Unmarshal(stripeEvent.Data.Raw, &charge)
+			unmarshalChargeError := json.Unmarshal(stripeEvent.Data.Raw, &stripeCharge)
 
 			if unmarshalChargeError != nil {
 				ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse charge"})
@@ -517,7 +517,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeRefundWebhook(ginContext *gin.Co
 				return
 			}
 
-			payment, getPaymentByPaymentIntentIdError := paymentAPIConfig.DB.GetPaymentByPaymentIntentId(ginContext.Request.Context(), common.StringToNullString(charge.PaymentIntent.ID))
+			payment, getPaymentByPaymentIntentIdError := paymentAPIConfig.DB.GetPaymentByPaymentIntentId(ginContext.Request.Context(), common.StringToNullString(stripeCharge.PaymentIntent.ID))
 
 			if getPaymentByPaymentIntentIdError != nil {
 				ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get payment details"})
@@ -553,17 +553,57 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeRefundWebhook(ginContext *gin.Co
 
 				paymentRefunded := PaymentRefunded {
 					PaymentID: payment.ID,
-					Amount: fmt.Sprintf("%.2f", float64(charge.AmountRefunded)/100.0),
+					Amount: fmt.Sprintf("%.2f", float64(stripeCharge.AmountRefunded)/100.0),
 				}
 				
 				paymentRefundResponse.Message = "refund successful"
 				paymentRefundResponse.PaymentRefunds = append(paymentRefundResponse.PaymentRefunds, paymentRefunded)
 
-				createPaymentLogParams.PaymentIntentID = charge.PaymentIntent.ID
-				createPaymentLogParams.Amount = fmt.Sprintf("%.2f", float64(charge.AmountRefunded)/100.0)
+				createPaymentLogParams.PaymentIntentID = stripeCharge.PaymentIntent.ID
+				createPaymentLogParams.Amount = fmt.Sprintf("%.2f", float64(stripeCharge.AmountRefunded)/100.0)
 				createPaymentLogParams.UserEmail = user.Email
 				createPaymentLogParams.PaymentID = payment.ID
 			}
+
+		case "refund.failed":
+			var stripeRefund stripe.Refund
+
+			unmarshalChargeError := json.Unmarshal(stripeEvent.Data.Raw, &stripeRefund)
+
+			if unmarshalChargeError != nil {
+				ginContext.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse refund"})
+
+				return
+			}
+
+			payment, getPaymentByPaymentIntentIdError := paymentAPIConfig.DB.GetPaymentByPaymentIntentId(ginContext.Request.Context(), common.StringToNullString(stripeRefund.PaymentIntent.ID))
+
+			if getPaymentByPaymentIntentIdError != nil {
+				ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get payment details"})
+
+				return
+			}
+
+			paymentRefunded := PaymentRefunded {
+				PaymentID: payment.ID,
+				Amount: fmt.Sprintf("%.2f", float64(stripeRefund.Amount)/100.0),
+			}
+
+			paymentRefundResponse.Message = string(stripeRefund.FailureReason)
+			paymentRefundResponse.PaymentRefunds = append(paymentRefundResponse.PaymentRefunds, paymentRefunded)
+
+			user, getUserByIdError := paymentAPIConfig.DB.GetUserById(ginContext.Request.Context(), payment.UserID)
+
+			if getUserByIdError != nil {
+				ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+
+				return
+			}
+
+			createPaymentLogParams.PaymentIntentID = stripeRefund.PaymentIntent.ID
+			createPaymentLogParams.Amount = fmt.Sprintf("%.2f", float64(stripeRefund.Amount)/100.0)
+			createPaymentLogParams.UserEmail = user.Email
+			createPaymentLogParams.PaymentID = payment.ID
 	}
 
 	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogParams)
