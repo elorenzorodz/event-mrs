@@ -604,6 +604,12 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeRefundWebhook(ginContext *gin.Co
 			createPaymentLogParams.Amount = fmt.Sprintf("%.2f", float64(stripeRefund.Amount)/100.0)
 			createPaymentLogParams.UserEmail = user.Email
 			createPaymentLogParams.PaymentID = payment.ID
+
+			sendRefundErrorEmailError := common.SendRefundErrorNotification()
+
+			if sendRefundErrorEmailError != nil {
+				log.Printf("error sending refund error notification")
+			}
 	}
 
 	_, createPaymentLogError := paymentAPIConfig.DB.CreatePaymentLog(ginContext.Request.Context(), createPaymentLogParams)
