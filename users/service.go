@@ -1,153 +1,109 @@
 package users
 
 import (
+	"context"
+	"errors"
 	"log"
-	"net/http"
-	"os"
 	"time"
 
-	"github.com/elorenzorodz/event-mrs/common"
+	"github.com/elorenzorodz/event-mrs/internal/auth"
 	"github.com/elorenzorodz/event-mrs/internal/database"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
+	"github.com/elorenzorodz/event-mrs/internal/validation"
 	"github.com/google/uuid"
 )
 
-func (userAPIConfig *UserAPIConfig) RegisterUser(ginContext *gin.Context) {
-	type parameters struct {
-		FirstName string `json:"firstname" binding:"required"`
-		LastName  string `json:"lastname" binding:"required"`
-		Email     string `json:"email" binding:"required"`
-		Password  string `json:"password" binding:"required"`
+var (
+	ErrPasswordInvalid = errors.New("invalid email or password")
+	ErrEmailExists     = errors.New("email address is already registered")
+	ErrPasswordWeak    = errors.New("invalid password, password must contain at least 1 upper case letter, 1 lower case letter, 1 digit and must be 12 to 20 characters long")
+)
+
+type UserService interface {
+	Register(ctx context.Context, req RegisterRequest) (*User, error)
+	Login(ctx context.Context, req LoginRequest) (*UserAuthorized, error)
+}
+
+type Service struct {
+	DBQueries *database.Queries 
+	TokenGenerator auth.TokenGenerator 
+}
+
+func NewService(db *database.Queries, tg auth.TokenGenerator) UserService {
+	return &Service{
+		DBQueries: db,
+		TokenGenerator: tg,
 	}
+}
 
-	params := parameters{}
-
-	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&params); parameterBindError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
-		
-		return
+func (service *Service) Register(ctx context.Context, req RegisterRequest) (*User, error) {
+	if !validation.IsEmailValid(req.Email) {
+		return nil, ErrPasswordInvalid
 	}
-
-	isEmailValid := common.IsEmailValid(params.Email)
-
-	// Validate email address.
-	if !isEmailValid {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid email address"})
-
-		return
+	if !validation.IsPasswordValid(req.Password) {
+		return nil, ErrPasswordWeak
 	}
-
-	isPasswordValid := common.IsPasswordValid(params.Password)
-
-	// Validate password.
-	if !isPasswordValid {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid password, password must contain at least 1 upper case letter, 1 lower case letter, 1 digit and must be 12 to 20 characters long"})
-
-		return
-	}
-
-	// Create hashed password for new user.
-	hashedPassword, hashPasswordError := common.HashPassword(params.Password)
-
+	
+	hashedPassword, hashPasswordError := auth.HashPassword(req.Password)
 	if hashPasswordError != nil {
 		log.Printf("Error hashing password: %s", hashPasswordError)
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error creating user"})
-
-		return
+		return nil, errors.New("internal server error")
 	}
 
 	createUserParams := database.CreateUserParams {
 		ID: uuid.New(),
-		Firstname: params.FirstName,
-		Lastname: params.LastName,
-		Email: params.Email,
+		Firstname: req.FirstName,
+		Lastname: req.LastName,
+		Email: req.Email,
 		Password: hashedPassword,
 	}
-
-	newUser, createUserError := userAPIConfig.DB.CreateUser(ginContext.Request.Context(), createUserParams)
+	
+	newUserDB, createUserError := service.DBQueries.CreateUser(ctx, createUserParams)
 
 	if createUserError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": createUserError.Error()})
-
-		return
+		return nil, ErrEmailExists 
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"user": newUser})
+	return databaseUserToDomainUser(newUserDB), nil
 }
 
-func (userAPIConfig *UserAPIConfig) LoginUser(ginContext *gin.Context) {
-	type parameters struct {
-		Email     string `json:"email" binding:"required"`
-		Password  string `json:"password" binding:"required"`
-	}
-
-	params := parameters{}
-
-	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&params); parameterBindError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
-		
-		return
-	}
-
-	getUser, getUserError := userAPIConfig.DB.GetUserByEmail(ginContext.Request.Context(), params.Email)
+func (service *Service) Login(ctx context.Context, req LoginRequest) (*UserAuthorized, error) {
+	getUserDB, getUserError := service.DBQueries.GetUserByEmail(ctx, req.Email)
 
 	if getUserError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
-
-		return
+		return nil, ErrPasswordInvalid 
 	}
 
-	// Verify password.
-	verifyPasswordError := common.VerifyPassword(params.Password, getUser.Password)
+	verifyPasswordError := auth.VerifyPassword(req.Password, getUserDB.Password)
 
 	if verifyPasswordError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid email or password"})
-
-		return
+		return nil, ErrPasswordInvalid 
 	}
 
-	// Private and public keys used the following settings for this project:
-	// Curve: SECG secp256r1 / X9.62 prime256v1 / NIST P-256
-	// Output Type: PEM text
-	// Format: PKCS#8
-	newAccessToken := jwt.NewWithClaims(
-		jwt.SigningMethodES256,
-		jwt.MapClaims{
-			"email": getUser.Email,
-			"exp": time.Now().Add(time.Hour * 1).Unix(),
-		})
-
-	privateBytes, readPrivateKeyError := os.ReadFile("private.pem")
-
-	if readPrivateKeyError != nil {
-		log.Printf("Private key read file error %v", readPrivateKeyError)
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
-
-		return
-	}
-
-	parsedPrivateKey, parsePrivateKeyError := jwt.ParseECPrivateKeyFromPEM(privateBytes)
-
-	if parsePrivateKeyError != nil {
-		log.Printf("Parse private key error %v", parsePrivateKeyError)
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
-
-		return
-	}
-
-	signedToken, signedTokenError := newAccessToken.SignedString(parsedPrivateKey)
+	signedToken, signedTokenError := service.TokenGenerator.Generate(getUserDB.Email)
 
 	if signedTokenError != nil {
-		log.Printf("Signing token error %v", signedTokenError)
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "failed to login, please try again in a few minutes"})
-
-		return
+		log.Printf("Token generation error: %v", signedTokenError)
+		return nil, errors.New("internal token generation error")
 	}
 
-	userAuthorized := DatabaseUserToUserAuthorizedJSON(getUser, signedToken)
+	return &UserAuthorized{
+		Email: getUserDB.Email,
+		AccessToken: signedToken,
+	}, nil
+}
 
-	ginContext.JSON(http.StatusOK, gin.H{"user": userAuthorized})
+func databaseUserToDomainUser(dbUser database.User) *User {
+	var updatedAt *time.Time
+	if dbUser.UpdatedAt.Valid {
+		updatedAt = &dbUser.UpdatedAt.Time
+	}
+
+	return &User{
+		ID:        dbUser.ID.String(), 
+		FirstName: dbUser.Firstname,
+		LastName:  dbUser.Lastname,
+		Email:     dbUser.Email,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: updatedAt,
+	}
 }
