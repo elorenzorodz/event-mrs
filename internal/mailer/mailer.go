@@ -3,6 +3,7 @@ package mailer
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -10,67 +11,115 @@ import (
 	"github.com/mailgun/mailgun-go/v4"
 )
 
-type Mailer struct {
-	mg          mailgun.Mailgun
-	senderName  string
-	senderEmail string
-	teamName    string
+type MailerConfig struct {
+	Domain      string
+	APIKey      string
+	SenderName  string
+	SenderEmail string
 }
 
-func NewMailer(apiKey, domain, senderName, senderEmail, teamName string) *Mailer {
-	mg := mailgun.NewMailgun(domain, apiKey)
+type Mailer struct {
+	mg          *mailgun.MailgunImpl
+	senderName  string
+	senderEmail string
+}
+
+func NewMailer(mailerConfig MailerConfig) *Mailer {
+	mg := mailgun.NewMailgun(mailerConfig.Domain, mailerConfig.APIKey)
 
 	return &Mailer{
 		mg:          mg,
-		senderName:  senderName,
-		senderEmail: senderEmail,
-		teamName:    teamName,
+		senderName:  mailerConfig.SenderName,
+		senderEmail: mailerConfig.SenderEmail,
 	}
+}
+
+func (m *Mailer) buildSender() string {
+	return fmt.Sprintf("%s <%s>", m.senderName, m.senderEmail)
 }
 
 func (m *Mailer) SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
-
 	eventConcat := ""
 	for _, eventDetail := range eventDetailsWithEventTitle {
-		// Assuming eventDetail.ShowDate is a string or compatible type
-		eventConcat += fmt.Sprintf(`%s - %s - %s\r\n`, eventDetail.Title, eventDetail.TicketDescription, eventDetail.ShowDate)
+		eventConcat += fmt.Sprintf(`%s - %s - %s
+`, eventDetail.Title, eventDetail.TicketDescription, eventDetail.ShowDate)
 	}
 
-	mailgunMessage := m.mg.NewMessage(
-		fmt.Sprintf("%s <%s>", m.senderName, m.senderEmail),
-		"Your payment and ticket reservation confirmation",
-		fmt.Sprintf(`Hi %s,\r\n\r\nThank you for your payment and reservation. Your tickets are confirmed.\r\n\r\nTickets:\r\n%s\r\n\r\n- %s Team`, recipientName, eventConcat, m.teamName),
+	mailgunMessage := mailgun.NewMessage(
+		m.buildSender(),
+		"Your payment and ticket reservation are confirmed",
+		fmt.Sprintf(`Hi %s,
+
+Thank you for your payment and ticket reservation. Below are your event details.
+
+%s
+
+- Event - MRS Team`, recipientName, eventConcat),
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 
-	return m.send(mailgunMessage, recipientName, recipientEmail)
-}
-
-func (m *Mailer) SendUpdatedEventNotification(recipientName string, recipientEmail string, eventTitle string, eventDescription string, eventOrganizer string) error {
-	organizer := ""
-	if strings.TrimSpace(eventOrganizer) != "" {
-		organizer = eventOrganizer
-	}
-
-	mailgunMessage := m.mg.NewMessage(
-		fmt.Sprintf("%s <%s>", m.senderName, m.senderEmail),
-		"Your booked event was updated",
-		fmt.Sprintf(`Hi %s,\r\n\r\nYou are receiving this email because your booked event has been updated. Please refer to details below.\r\n\r\nTitle: %s\r\nDescription: %s\r\n%s\r\n\r\n- %s Team`, recipientName, eventTitle, eventDescription, organizer, m.teamName),
-		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
-	)
-
-	return m.send(mailgunMessage, recipientName, recipientEmail)
-}
-
-func (m *Mailer) send(mailgunMessage *mailgun.Message, recipientName, recipientEmail string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
 	defer cancel()
 
 	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
 
 	if sendError != nil {
-		// Log the full error internally
-		return fmt.Errorf("mail send failed: sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %w", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func (m *Mailer) SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string, refundOrCancelledNotifMessage string) error {
+	mailgunMessage := mailgun.NewMessage(
+		m.buildSender(),
+		"Your booked event was cancelled and/or refunded",
+		refundOrCancelledNotifMessage,
+		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	defer cancel()
+
+	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
+
+	if sendError != nil {
+		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func (m *Mailer) SendUpdatedEventNotification(recipientName string, recipientEmail string, eventTitle string, eventDescription string, eventOrganizer string) error {
+	organizerText := ""
+	if strings.TrimSpace(eventOrganizer) != "" {
+		organizerText = fmt.Sprintf("Organizer: %s\r\n", eventOrganizer)
+	}
+
+	mailgunMessage := mailgun.NewMessage(
+		m.buildSender(),
+		"Your booked event was updated",
+		fmt.Sprintf(`Hi %s,
+
+You are receiving this email because your booked event has been updated. Please refer to details below.
+
+Title: %s
+Description: %s
+%s
+- Event - MRS Team`, recipientName, eventTitle, eventDescription, organizerText),
+		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	defer cancel()
+
+	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
+	
+	if sendError != nil {
+		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
 	}
 
 	return nil
