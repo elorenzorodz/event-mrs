@@ -9,6 +9,7 @@ import (
 	"github.com/elorenzorodz/event-mrs/events"
 	"github.com/elorenzorodz/event-mrs/internal/auth"
 	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/elorenzorodz/event-mrs/internal/mailer"
 	"github.com/elorenzorodz/event-mrs/middleware"
 	"github.com/elorenzorodz/event-mrs/payments"
 	"github.com/elorenzorodz/event-mrs/reservations"
@@ -16,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/stripe/stripe-go/v83"
 )
 
 func main() {
@@ -63,8 +65,19 @@ func main() {
 	routerWithAuthorization := routerAPIPrefix.Group("")
 	routerWithAuthorization.Use(middleware.AuthorizationMiddleware(dbQueries, tokenValidator))
 
+	mailerConfig := mailer.MailerConfig{
+		Domain: envConfig.MailgunSendingDomain,
+		APIKey: envConfig.MailgunAPIKey,
+		SenderName: envConfig.SenderName,
+		SenderEmail: envConfig.SenderEmail,
+	}
+	newMailer := mailer.NewMailer(mailerConfig)
+	stripe.Key = envConfig.StripeSecretKey
+	stripeClient := &events.StripeAPIClient{}
+	eventService := events.NewService(*dbQueries, newMailer, stripeClient)
+
 	eventAPIConfig := events.EventAPIConfig{
-		DB: dbQueries,
+		Service: eventService,
 	}
 
 	routerWithAuthorization.GET("/events", eventAPIConfig.GetUserEvents)

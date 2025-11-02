@@ -1,354 +1,242 @@
 package events
 
 import (
-	"context"
+	"errors"
 	"fmt"
-	"log"
+	"net/http"
 	"strings"
-	"sync"
 
-	"github.com/elorenzorodz/event-mrs/common"
-	"github.com/elorenzorodz/event-mrs/event_details"
-	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/stripe/stripe-go/v83"
-	"github.com/stripe/stripe-go/v83/paymentintent"
-	"github.com/stripe/stripe-go/v83/refund"
 )
 
-func DatabaseEventToEventJSON(databaseEvent database.Event, eventDetails []event_details.EventDetail) Event {
-	return Event{
-		ID:          databaseEvent.ID,
-		Title:       databaseEvent.Title,
-		Description: databaseEvent.Description,
-		Organizer:   databaseEvent.Organizer.String,
-		CreatedAt:   databaseEvent.CreatedAt,
-		UpdatedAt:   common.NullTimeToString(databaseEvent.UpdatedAt),
-		UserID:      databaseEvent.UserID,
-		Tickets:     eventDetails,
-	}
+type EventAPIConfig struct {
+	Service EventService
 }
 
-func DatabaseEventsToEventsJSON(databaseEvents []database.Event, eventDetailsMap map[string][]event_details.EventDetail) []Event {
-	events := []Event{}
+func getOwnerIDFromContext(ginContext *gin.Context) (uuid.UUID, error) {
+	ownerID, exists := ginContext.Get("userId")
 
-	for _, databaseEvent := range databaseEvents {
-		eventDetails := []event_details.EventDetail{}
+	if !exists {
+		return uuid.Nil, errors.New("user ID not found in context (middleware missing)")
+	}
+	
+	ownerIDUUID, ok := ownerID.(uuid.UUID)
 
-		if eventDetailsMap != nil || len(eventDetailsMap) > 0 {
-			eventDetails = eventDetailsMap[databaseEvent.ID.String()]
+	if !ok {
+        if ownerIDStr, isStr := ownerID.(string); isStr {
+            return uuid.Parse(ownerIDStr)
+        }
+
+        return uuid.Nil, errors.New("user ID in context is not a UUID or a string")
+	}
+
+	return ownerIDUUID, nil
+}
+
+func (eventAPIConfig *EventAPIConfig) CreateEvent(ginContext *gin.Context) {
+	var createEventRequest CreateEventRequest
+	
+	if err := ginContext.ShouldBindJSON(&createEventRequest); err != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
+
+		return
+	}
+
+	ownerID, getOwnerIDError := getOwnerIDFromContext(ginContext)
+
+	if getOwnerIDError != nil {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID from context"})
+
+		return
+	}
+
+	event, createEventError := eventAPIConfig.Service.Create(ginContext.Request.Context(), ownerID, createEventRequest)
+	
+	if createEventError != nil {
+		if strings.Contains(createEventError.Error(), "encountered errors") {
+			ginContext.JSON(http.StatusMultiStatus, gin.H{"event": NewEventResponse(event), "error": fmt.Sprintf("error creating some details/tickets: %v", createEventError.Error())})
+
+			return
+		}
+		
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error creating event, please try again in a few minutes"})
+
+		return
+	}
+
+	ginContext.JSON(http.StatusCreated, gin.H{"event": NewEventResponse(event)})
+}
+
+func (eventAPIConfig *EventAPIConfig) GetUserEvents(ginContext *gin.Context) {
+	ownerID, getOwnerIDError := getOwnerIDFromContext(ginContext)
+
+	if getOwnerIDError != nil {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID from context"})
+
+		return
+	}
+
+	events, getEventsByOwnerError := eventAPIConfig.Service.GetEventsByOwner(ginContext.Request.Context(), ownerID)
+
+	if getEventsByOwnerError != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving user events, please try again in a few minutes"})
+
+		return
+	}
+	
+	responseEvents := make([]EventResponse, len(events))
+
+	for index, event := range events {
+		responseEvents[index] = NewEventResponse(&event)
+	}
+
+	ginContext.JSON(http.StatusOK, gin.H{"events": responseEvents})
+}
+
+func (eventAPIConfig *EventAPIConfig) GetUserEventById(ginContext *gin.Context) {
+	eventID, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	ownerID, getEventsByOwnerError := getOwnerIDFromContext(ginContext)
+
+	if getEventsByOwnerError != nil {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID from context"})
+
+		return
+	}
+
+	event, getEventByIdError := eventAPIConfig.Service.GetEventByID(ginContext.Request.Context(), eventID, ownerID)
+
+	if getEventByIdError != nil {
+		if errors.Is(getEventByIdError, ErrEventNotFound) {
+			ginContext.JSON(http.StatusNotFound, gin.H{"error": "event not found or not owned by user"})
+
+			return
 		}
 
-		events = append(events, DatabaseEventToEventJSON(databaseEvent, eventDetails))
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving user event, please try again in a few minutes"})
+
+		return
 	}
 
-	return events
+	ginContext.JSON(http.StatusOK, gin.H{"event": NewEventResponse(event)})
 }
 
-func DatabaseSearchEventsToSearchEventsJSON(databaseSearchEvents []database.GetEventsRow) []SearchEvent {
-	searchEvents := []SearchEvent{}
+func (eventAPIConfig *EventAPIConfig) UpdateEvent(ginContext *gin.Context) {
+	eventID, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
 
-	for _, databaseSearchEvent := range databaseSearchEvents {
-		searchEvent := SearchEvent{
-			EventID:           databaseSearchEvent.EventID,
-			Title:             databaseSearchEvent.Title,
-			Description:       databaseSearchEvent.Description,
-			Organizer:         databaseSearchEvent.Organizer.String,
-			EventDetailID:     databaseSearchEvent.EventID,
-			ShowDate:          common.NullTimeToString(databaseSearchEvent.ShowDate),
-			Price:             common.StringToFloat32(databaseSearchEvent.Price.String),
-			NumberOfTickets:   databaseSearchEvent.NumberOfTickets.Int32,
-			TicketDescription: databaseSearchEvent.TicketDescription.String,
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+
+		return
+	}
+
+	var updateEventRequest UpdateEventRequest
+
+	if err := ginContext.ShouldBindJSON(&updateEventRequest); err != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
+
+		return
+	}
+
+	ownerID, getEventsByOwnerError := getOwnerIDFromContext(ginContext)
+
+	if getEventsByOwnerError != nil {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID from context"})
+
+		return
+	}
+
+	updatedEvent, err := eventAPIConfig.Service.Update(ginContext.Request.Context(), eventID, ownerID, updateEventRequest)
+
+	if err != nil {
+		if errors.Is(err, ErrEventNotFound) {
+			ginContext.JSON(http.StatusNotFound, gin.H{"error": "event not found or not owned by user"})
+
+			return
 		}
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error updating event, please try again in a few minutes"})
 
-		searchEvents = append(searchEvents, searchEvent)
+		return
 	}
-
-	return searchEvents
+	
+	ginContext.JSON(http.StatusOK, gin.H{"event": NewEventResponse(updatedEvent)})
 }
 
-func SaveEventTickets(db *database.Queries, ctx context.Context, eventId uuid.UUID, tickets []event_details.EventDetailParameters) ([]event_details.EventDetail, error) {
-	var (
-		newTickets   []event_details.EventDetail
-		mutex        sync.Mutex
-		waitGroup    sync.WaitGroup
-		errorChannel = make(chan error, len(tickets))
-	)
+func (eventAPIConfig *EventAPIConfig) DeleteEvent(ginContext *gin.Context) {
+	eventID, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
 
-	for _, ticket := range tickets {
-		tkt := ticket // capture loop variable
+	if parseEventIdError != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
+		
+		return
+	}
 
-		waitGroup.Go(func() {
+	ownerID, getEventsByOwnerError := getOwnerIDFromContext(ginContext)
+	if getEventsByOwnerError != nil {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID from context"})
 
-			showDate, referenceFormat, parseShowDateError := common.StringToTime(tkt.ShowDate)
+		return
+	}
+	
+	userEmail, ok := ginContext.MustGet("email").(string)
 
-			if parseShowDateError != nil {
-				errorChannel <- fmt.Errorf("error parsing show date '%s': expected format %s", tkt.ShowDate, referenceFormat)
+	if !ok {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "user email not found in context"})
 
-				return
-			}
+		return
+	}
 
-			createEventDetailParams := database.CreateEventDetailParams{
-				ID:                uuid.New(),
-				ShowDate:          showDate,
-				Price:             fmt.Sprintf("%.2f", tkt.Price),
-				NumberOfTickets:   tkt.NumberOfTickets,
-				TicketsRemaining:  tkt.NumberOfTickets,
-				TicketDescription: tkt.TicketDescription,
-				EventID:           eventId,
-			}
+	summary, deleteEventError := eventAPIConfig.Service.Delete(ginContext.Request.Context(), eventID, ownerID, userEmail)
 
-			newEventDetail, createEventDetailError := db.CreateEventDetail(ctx, createEventDetailParams)
+	if deleteEventError != nil {
+		if errors.Is(deleteEventError, ErrEventNotFound) {
+			ginContext.JSON(http.StatusNotFound, gin.H{"error": "event not found or not owned by user"})
+			return
+		}
+		
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error deleting event, please try again in a few minutes"})
 
-			if createEventDetailError != nil {
-				errorChannel <- fmt.Errorf("error creating event detail: %w", createEventDetailError)
+		return
+	}
 
-				return
-			}
-
-			mutex.Lock()
-			newTickets = append(newTickets, event_details.DatabaseEventDetailToEventDetailJSON(newEventDetail))
-			mutex.Unlock()
+	if len(summary.EventFailedRefundOrCancels) != 0 || len(summary.FailedNotificationEmails) != 0 {
+		ginContext.JSON(http.StatusMultiStatus, gin.H{
+			"message": "event deleted successfully",
+			"payments_failed_refund_or_cancelled": summary.EventFailedRefundOrCancels,
+			"failed_refund_cancelled_notif_emails": summary.FailedNotificationEmails,
 		})
+
+		return
 	}
 
-	go func() {
-		waitGroup.Wait()
-		close(errorChannel)
-	}()
-
-	var allErrors []string
-
-	for err := range errorChannel {
-		if err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	// This ensures that if there were any errors, we still return the tickets that were created successfully.
-	if len(allErrors) > 0 {
-		return newTickets, fmt.Errorf("encountered errors:\n%s", strings.Join(allErrors, "\n"))
-	}
-
-	return newTickets, nil
+	ginContext.JSON(http.StatusOK, gin.H{"message": "event deleted successfully"})
 }
 
-func EventRefundOrCancelPayment(db *database.Queries, ctx context.Context, eventId uuid.UUID, userId uuid.UUID, userEmail string) ([]EventFailedRefundOrCancel, []FailedNotificationEmail, error) {
-	getPaidEventForRefundParams := database.GetPaidEventForRefundParams{
-		EventID: eventId,
-		UserID:  userId,
-	}
+func (eventAPIConfig *EventAPIConfig) GetEvents(ginContext *gin.Context) {
+	searchQuery := ginContext.Query("search")
+	startShowDateQuery := ginContext.Query("startShowDate")
+	endShowDateQuery := ginContext.Query("endShowDate")
 
-	paidEventForRefunds, getRefundEventPaymentError := db.GetPaidEventForRefund(ctx, getPaidEventForRefundParams)
+	searchEvents, searchEventsError := eventAPIConfig.Service.SearchEvents(ginContext.Request.Context(), searchQuery, startShowDateQuery, endShowDateQuery)
 
-	if getRefundEventPaymentError != nil {
-		return []EventFailedRefundOrCancel{}, []FailedNotificationEmail{}, fmt.Errorf("failed to get payment and reservations for the event")
-	}
+	if searchEventsError != nil {
+		if strings.Contains(searchEventsError.Error(), "invalid") {
+			ginContext.JSON(http.StatusBadRequest, gin.H{"error": searchEventsError.Error()})
 
-	if len(paidEventForRefunds) == 0 {
-		return []EventFailedRefundOrCancel{}, []FailedNotificationEmail{}, nil
-	}
-
-	var (
-		PaymentIDs                 []uuid.UUID
-		mutex                      sync.Mutex
-		waitGroup                  sync.WaitGroup
-		eventFailedRefundOrCancels []EventFailedRefundOrCancel
-	)
-
-	stripe.Key = common.GetEnvVariable("STRIPE_SECRET_KEY")
-
-	for _, paidEvent := range paidEventForRefunds {
-		paidEventForRefund := paidEvent
-		amount, _ := common.PriceStringToCents(paidEventForRefund.Amount)
-		ticketPrice, _ := common.PriceStringToCents(paidEventForRefund.TicketPrice)
-		isErrorOccured := false
-
-		if paidEventForRefund.Status == "refunded" || paidEventForRefund.Status == "cancelled" {
-			continue
+			return
 		}
 
-		if amount == 0 {
-			PaymentIDs = append(PaymentIDs, paidEventForRefund.PaymentID)
-		} else {
-			if amount != ticketPrice {
-				// If paid amount is different from ticket price, user might have been booked different events in a single payment.
-				amount = ticketPrice
-			}
-		}
-
-		waitGroup.Go(func() {
-			eventFailedRefundOrCancel := EventFailedRefundOrCancel{}
-
-			updatePaymentParams := database.UpdatePaymentParams{
-				ID:              paidEventForRefund.PaymentID,
-				Amount:          fmt.Sprintf("%.2f", float64(amount)/100.0),
-				PaymentIntentID: paidEventForRefund.PaymentIntentID,
-				UserID:          userId,
-			}
-
-			createPaymentLogParams := database.CreatePaymentLogParams{
-				ID:              uuid.New(),
-				PaymentIntentID: paidEventForRefund.PaymentID.String(),
-				Amount:          fmt.Sprintf("%.2f", float64(amount)/100.0),
-				UserEmail:       userEmail,
-				PaymentID:       paidEventForRefund.PaymentID,
-			}
-
-			if paidEventForRefund.Status == string(stripe.PaymentIntentStatusSucceeded) {
-				refundParams := &stripe.RefundParams{
-					Amount:        stripe.Int64(amount),
-					PaymentIntent: stripe.String(paidEventForRefund.PaymentIntentID.String),
-				}
-
-				refundResult, refundError := refund.New(refundParams)
-
-				if refundError != nil {
-					sendRefundErrorEmailError := common.SendRefundErrorNotification()
-
-					if sendRefundErrorEmailError != nil {
-						log.Printf("error sending refund error notification")
-					}
-					
-					if stripeError, ok := refundError.(*stripe.Error); ok {
-						createPaymentLogParams.Status = string(stripeError.Code)
-						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
-
-						eventFailedRefundOrCancel.PaymentID = paidEventForRefund.PaymentID
-						eventFailedRefundOrCancel.Action = "stripe refund request"
-						eventFailedRefundOrCancel.Code = string(stripeError.Code)
-						eventFailedRefundOrCancel.Message = stripeError.Msg
-
-						isErrorOccured = true
-					}
-				}
-
-				createPaymentLogParams.Status = string(refundResult.Status)
-
-				switch refundResult.Status {
-				case stripe.RefundStatusFailed:
-					createPaymentLogParams.Description = common.StringToNullString(string(refundResult.FailureReason))
-
-				case stripe.RefundStatusPending:
-					createPaymentLogParams.Description = common.StringToNullString("refund pending")
-					updatePaymentParams.Status = "refund pending"
-
-				case stripe.RefundStatusSucceeded:
-					createPaymentLogParams.Description = common.StringToNullString("refund succeeded")
-					updatePaymentParams.Status = "refunded"
-				}
-			} else {
-				paymentIntentCancelParams := &stripe.PaymentIntentCancelParams{
-					CancellationReason: stripe.String("abandoned"),
-				}
-
-				_, paymentIntentCancelError := paymentintent.Cancel(paidEventForRefund.PaymentIntentID.String, paymentIntentCancelParams)
-
-				if paymentIntentCancelError != nil {
-					if stripeError, ok := paymentIntentCancelError.(*stripe.Error); ok {
-						createPaymentLogParams.Status = string(stripeError.Code)
-						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
-
-						eventFailedRefundOrCancel.PaymentID = paidEventForRefund.PaymentID
-						eventFailedRefundOrCancel.Action = "stripe cancel request"
-						eventFailedRefundOrCancel.Code = string(stripeError.Code)
-						eventFailedRefundOrCancel.Message = stripeError.Msg
-						isErrorOccured = true
-					}
-				} else {
-					updatePaymentParams.Status = "cancelled"
-					createPaymentLogParams.Status = "cancelled"
-					createPaymentLogParams.Description = common.StringToNullString("event deleted")
-				}
-			}
-
-			_, createPaymentLogError := db.CreatePaymentLog(ctx, createPaymentLogParams)
-
-			if createPaymentLogError != nil {
-				log.Printf("error: create payment log - %s", createPaymentLogError)
-			}
-
-			if isErrorOccured {
-				mutex.Lock()
-				eventFailedRefundOrCancels = append(eventFailedRefundOrCancels, eventFailedRefundOrCancel)
-				mutex.Unlock()
-
-				return
-			}
-
-			_, updatePaymentError := db.UpdatePayment(ctx, updatePaymentParams)
-
-			if updatePaymentError != nil {
-				log.Printf("error: update payment - %s", updatePaymentError)
-			}
-
-			mutex.Lock()
-			PaymentIDs = append(PaymentIDs, paidEventForRefund.PaymentID)
-			mutex.Unlock()
-		})
+		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error searching events, please try again in a few minutes"})
+		
+		return
 	}
 
-	waitGroup.Wait()
-
-	if len(PaymentIDs) == 0 {
-		return eventFailedRefundOrCancels, []FailedNotificationEmail{}, nil
-	}
-
-	// Get payments for deletion.
-	payments, _ := db.GetMultiplePayments(ctx, PaymentIDs)
-
-	var (
-		sendRefundCanceWaitGroup          sync.WaitGroup
-		sendRefundCancelNotifErrorChannel = make(chan error, len(payments))
-	)
-
-	for _, pymnt := range payments {
-		payment := pymnt
-		eventFailedRefundOrCancel := EventFailedRefundOrCancel{}
-
-		sendRefundCanceWaitGroup.Go(func() {
-			user, getUserByIdError := db.GetUserById(ctx, payment.UserID)
-
-			if getUserByIdError != nil {
-				eventFailedRefundOrCancel.PaymentID = payment.ID
-				eventFailedRefundOrCancel.Action = "get user email for email notification"
-				eventFailedRefundOrCancel.Message = getUserByIdError.Error()
-			}
-
-			eventTitle := paidEventForRefunds[0].Title
-
-			recipientName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
-
-			refundOrCancelledNotifMessage := fmt.Sprintf(`Hi %s,
-
-The event: %s, that you booked was cancelled and your payment was refunded. 
-If you didn't pay yet, the pending payment is now cancelled.
-Sorry for the inconvencience.
-
-- Event - MRS Team`, recipientName, eventTitle)
-
-			sendRefundCancelError := common.SendRefundOrCancelledEmail(recipientName, user.Email, eventTitle, refundOrCancelledNotifMessage)
-
-			if sendRefundCancelError != nil {
-				sendRefundCancelNotifErrorChannel <- sendRefundCancelError
-			}
-		})
-	}
-
-	sendRefundCanceWaitGroup.Wait()
-	close(sendRefundCancelNotifErrorChannel)
-
-	failedNotificationEmails := []FailedNotificationEmail{}
-
-	for errorMessage := range sendRefundCancelNotifErrorChannel {
-		if errorMessage != nil {
-			failedNotificationEmail := FailedNotificationEmail{
-				SendRefundCancelNotificationError: errorMessage.Error(),
-			}
-
-			failedNotificationEmails = append(failedNotificationEmails, failedNotificationEmail)
-		}
-	}
-
-	return eventFailedRefundOrCancels, failedNotificationEmails, nil
+	ginContext.JSON(http.StatusOK, gin.H{"events": searchEvents})
 }
