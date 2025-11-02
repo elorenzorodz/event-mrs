@@ -28,10 +28,10 @@ type Service struct {
 	TokenGenerator auth.TokenGenerator 
 }
 
-func NewService(db *database.Queries, tg auth.TokenGenerator) UserService {
+func NewService(dbQueries *database.Queries, tokenGenerator auth.TokenGenerator) UserService {
 	return &Service{
-		DBQueries: db,
-		TokenGenerator: tg,
+		DBQueries: dbQueries,
+		TokenGenerator: tokenGenerator,
 	}
 }
 
