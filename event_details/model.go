@@ -1,15 +1,37 @@
 package event_details
 
 import (
+	"context"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/elorenzorodz/event-mrs/internal/mailer"
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v83"
 )
 
 type EventDetailAPIConfig struct {
-	DB *database.Queries
+	Service EventDetailService
 }
+
+type EventDetailService interface {
+	Create(ctx context.Context, eventID uuid.UUID, req EventDetailParameters) (*EventDetail, error)
+	Update(ctx context.Context, eventID, eventDetailID uuid.UUID, req EventDetailParameters) (*EventDetail, error)
+	Delete(ctx context.Context, eventID, eventDetailID, ownerID uuid.UUID, userEmail string) ([]EventDetailFailedRefundOrCancel, []FailedNotificationEmail, error)
+}
+
+type Service struct {
+	DBQueries database.Queries
+	Stripe StripeClient
+	Mailer    *mailer.Mailer
+}
+
+type StripeClient interface {
+	Refund(amount int64, paymentIntentID string) (*stripe.Refund, error)
+	CancelPaymentIntent(paymentIntentID string, cancellationReason string) error
+}
+
+type StripeAPIClient struct{}
 
 type EventDetail struct {
 	ID                uuid.UUID `json:"id"`
@@ -31,10 +53,10 @@ type EventDetailParameters struct {
 }
 
 type EventDetailFailedRefundOrCancel struct {
-	PaymentID           uuid.UUID                 `json:"payment_id"`
-	Action              string                    `json:"action"`
-	Code                string                    `json:"code"`
-	Message             string                    `json:"message"`
+	PaymentID uuid.UUID `json:"payment_id"`
+	Action    string    `json:"action"`
+	Code      string    `json:"code"`
+	Message   string    `json:"message"`
 }
 
 type FailedNotificationEmail struct {

@@ -1,173 +1,333 @@
 package event_details
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
-	"net/http"
+	"log"
+	"sync"
 
 	"github.com/elorenzorodz/event-mrs/common"
 	"github.com/elorenzorodz/event-mrs/internal/database"
-	"github.com/gin-gonic/gin"
+	"github.com/elorenzorodz/event-mrs/internal/mailer"
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v83"
+	"github.com/stripe/stripe-go/v83/paymentintent"
+	"github.com/stripe/stripe-go/v83/refund"
 )
 
-func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *gin.Context) {
-	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
+func NewService(dbQueries database.Queries, mMailer *mailer.Mailer, stripeClient StripeClient) EventDetailService {
+	return &Service{
+		DBQueries: dbQueries,
+		Mailer:    mMailer,
+		Stripe:    stripeClient,
+	}
+}
 
-	if parseEventIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
-
-		return
+func (stripeAPIClient *StripeAPIClient) Refund(amount int64, paymentIntentID string) (*stripe.Refund, error) {
+	refundParams := &stripe.RefundParams{
+		Amount:        stripe.Int64(amount),
+		PaymentIntent: stripe.String(paymentIntentID),
 	}
 
-	eventDetailParams := EventDetailParameters{}
+	return refund.New(refundParams)
+}
 
-	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&eventDetailParams); parameterBindError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present and/or numbers are not be quoted"})
-
-		return
+func (stripeAPIClient *StripeAPIClient) CancelPaymentIntent(paymentIntentID string, cancellationReason string) error {
+	paymentIntentCancelParams := &stripe.PaymentIntentCancelParams{
+		CancellationReason: stripe.String("abandoned"),
 	}
 
-	showDate, referenceShowDateFormat, parseShowDateError := common.StringToTime(eventDetailParams.ShowDate)
+	_, err := paymentintent.Cancel(paymentIntentID, paymentIntentCancelParams)
+
+	return err
+}
+
+func (service *Service) Create(ctx context.Context, eventID uuid.UUID, req EventDetailParameters) (*EventDetail, error) {
+	showDate, _, parseShowDateError := common.StringToTime(req.ShowDate)
 
 	if parseShowDateError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
-
-		return
+		return nil, parseShowDateError
 	}
+
+	priceString := fmt.Sprintf("%.2f", req.Price)
 
 	createEventDetailParams := database.CreateEventDetailParams{
 		ID:                uuid.New(),
 		ShowDate:          showDate,
-		Price:             fmt.Sprintf("%.2f", eventDetailParams.Price),
-		NumberOfTickets:   eventDetailParams.NumberOfTickets,
-		TicketDescription: eventDetailParams.TicketDescription,
-		EventID:           eventId,
+		Price:             priceString,
+		NumberOfTickets:   req.NumberOfTickets,
+		TicketsRemaining:  req.NumberOfTickets,
+		TicketDescription: req.TicketDescription,
+		EventID:           eventID,
 	}
 
-	newEventDetail, createEventDetailError := eventDetailAPIConfig.DB.CreateEventDetail(ginContext.Request.Context(), createEventDetailParams)
+	createdEventDetail, createEventDetailError := service.DBQueries.CreateEventDetail(ctx, createEventDetailParams)
 
 	if createEventDetailError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error creating event detail, please try again in a few minutes"})
+		log.Printf("error creating event detail: %v", createEventDetailError)
 
-		return
+		return nil, errors.New("error creating event detail")
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(newEventDetail)})
+	eventDetail := DatabaseEventDetailToEventDetailJSON(createdEventDetail)
+
+	return &eventDetail, nil
 }
 
-func (eventDetailAPIConfig *EventDetailAPIConfig) UpdateEventDetail(ginContext *gin.Context) {
-	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
-
-	if parseEventIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
-
-		return
-	}
-
-	eventDetailId, parseEventDetailIdError := uuid.Parse(ginContext.Param("eventDetailId"))
-
-	if parseEventDetailIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event detail ID"})
-
-		return
-	}
-
-	eventDetailParams := EventDetailParameters{}
-
-	// Bind incoming JSON to struct and check for errors in the process.
-	if parameterBindError := ginContext.ShouldBindJSON(&eventDetailParams); parameterBindError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present and/or numbers are not be quoted"})
-
-		return
-	}
-
-	showDate, referenceShowDateFormat, parseShowDateError := common.StringToTime(eventDetailParams.ShowDate)
+func (service *Service) Update(ctx context.Context, eventID, eventDetailID uuid.UUID, req EventDetailParameters) (*EventDetail, error) {
+	showDate, _, parseShowDateError := common.StringToTime(req.ShowDate)
 
 	if parseShowDateError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date, please use the following format: %s", referenceShowDateFormat)})
-
-		return
+		return nil, parseShowDateError
 	}
+
+	priceString := fmt.Sprintf("%.2f", req.Price)
 
 	updateEventDetailParams := database.UpdateEventDetailParams{
-		ID:                eventDetailId,
 		ShowDate:          showDate,
-		Price:             fmt.Sprintf("%.2f", eventDetailParams.Price),
-		NumberOfTickets:   eventDetailParams.NumberOfTickets,
-		TicketDescription: eventDetailParams.TicketDescription,
-		EventID:           eventId,
+		Price:             priceString,
+		NumberOfTickets:   req.NumberOfTickets,
+		TicketDescription: req.TicketDescription,
+		ID:                eventDetailID,
+		EventID:           eventID,
 	}
 
-	updatedEventDetail, updateEventDetailError := eventDetailAPIConfig.DB.UpdateEventDetail(ginContext.Request.Context(), updateEventDetailParams)
+	updatedEventDetail, updateEventDetailError := service.DBQueries.UpdateEventDetail(ctx, updateEventDetailParams)
 
 	if updateEventDetailError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error updating event detail, please try again in a few minutes"})
+		log.Printf("error updating event detail: %v", updateEventDetailError)
 
-		return
+		return nil, updateEventDetailError
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"event_detail": DatabaseEventDetailToEventDetailJSON(updatedEventDetail)})
+	eventDetail := DatabaseEventDetailToEventDetailJSON(updatedEventDetail)
+
+	return &eventDetail, nil
 }
 
-func (eventDetailAPIConfig *EventDetailAPIConfig) DeleteEventDetail(ginContext *gin.Context) {
-	eventId, parseEventIdError := uuid.Parse(ginContext.Param("eventId"))
-
-	if parseEventIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
-
-		return
-	}
-
-	eventDetailId, parseEventDetailIdError := uuid.Parse(ginContext.Param("eventDetailId"))
-
-	if parseEventDetailIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid event detail ID"})
-
-		return
-	}
-
-	userId, parseUserIdError := uuid.Parse(ginContext.MustGet("userId").(uuid.UUID).String())
-
-	if parseUserIdError != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
-
-		return
-	}
-
-	userEmail := ginContext.MustGet("email").(string)
-
-	// Process refund and/or cancel Stripe payments before deleting event detail.
-	eventDetailFailedRefundOrCancels, failedNotificationEmails, refundCancelPaymentErrors := EventDetailRefundOrCancelPayment(eventDetailAPIConfig.DB, ginContext.Request.Context(), eventDetailId, userId, userEmail)
+func (service *Service) Delete(ctx context.Context, eventID, eventDetailID, ownerID uuid.UUID, userEmail string) ([]EventDetailFailedRefundOrCancel, []FailedNotificationEmail, error) {
+	failedRefunds, failedEmails, refundCancelPaymentErrors := service.EventDetailRefundOrCancelPayment(ctx, eventDetailID, ownerID, userEmail)
 
 	if refundCancelPaymentErrors != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": refundCancelPaymentErrors})
-
-		return
+		return []EventDetailFailedRefundOrCancel{}, []FailedNotificationEmail{}, refundCancelPaymentErrors
 	}
 
 	deleteEventDetailParams := database.DeleteEventDetailParams{
-		ID:      eventDetailId,
-		EventID: eventId,
+		ID:      eventDetailID,
+		EventID: eventID,
 	}
 
-	deleteEventError := eventDetailAPIConfig.DB.DeleteEventDetail(ginContext.Request.Context(), deleteEventDetailParams)
-
+	deleteEventError := service.DBQueries.DeleteEventDetail(ctx, deleteEventDetailParams)
 	if deleteEventError != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": "error deleting event detail, please try again in a few minutes"})
 
-		return
+		if deleteEventError == sql.ErrNoRows {
+			return []EventDetailFailedRefundOrCancel{}, []FailedNotificationEmail{}, deleteEventError
+		}
+
+		log.Printf("error deleting event detail: %v", deleteEventError)
+		
+		return failedRefunds, failedEmails, deleteEventError
 	}
 
-	if len(eventDetailFailedRefundOrCancels) != 0 || len(failedNotificationEmails) != 0 {
-		ginContext.JSON(http.StatusMultiStatus,
-			gin.H{
-				"message":                              "event detail deleted successfully",
-				"payments_failed_refund_or_cancelled":  eventDetailFailedRefundOrCancels,
-				"failed_refund_cancelled_notif_emails": failedNotificationEmails})
+	return failedRefunds, failedEmails, nil
+}
 
-		return
+func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, eventDetailID uuid.UUID, userID uuid.UUID, userEmail string) ([]EventDetailFailedRefundOrCancel, []FailedNotificationEmail, error) {
+	getPaidEventDetailForRefundParams := database.GetPaidEventDetailForRefundParams {
+		EventDetailID: eventDetailID,
+		UserID: userID,
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "event detail deleted successfully"})
+	paidEventDetailForRefunds, getRefundEventDetailPaymentError := service.DBQueries.GetPaidEventDetailForRefund(ctx, getPaidEventDetailForRefundParams)
+
+	if getRefundEventDetailPaymentError != nil {
+		return nil, nil, fmt.Errorf("failed to get payment and reservations for the event detail")
+	}
+
+	if len(paidEventDetailForRefunds) == 0 {
+		return nil, nil, nil
+	}
+
+	var (
+		PaymentIDs []uuid.UUID
+		mutex sync.Mutex
+		waitGroup sync.WaitGroup
+		eventDetailFailedRefundOrCancels []EventDetailFailedRefundOrCancel
+	)
+
+	for _, paidEventDetail := range paidEventDetailForRefunds {
+		paidEventDetailForRefund := paidEventDetail
+		amount, _ := common.PriceStringToCents(paidEventDetailForRefund.Amount)
+		ticketPrice, _ := common.PriceStringToCents(paidEventDetailForRefund.TicketPrice)
+		isErrorOccured := false
+
+		if paidEventDetailForRefund.Status == "refunded" || paidEventDetailForRefund.Status == "cancelled" {
+			continue
+		}
+
+		if amount == 0 || ticketPrice == 0 {
+			// Skip Stripe processing for free/unpaid tickets, but collect ID for email notification.
+			mutex.Lock()
+			PaymentIDs = append(PaymentIDs, paidEventDetailForRefund.PaymentID)
+			mutex.Unlock()
+
+			continue
+		} else {
+			if amount != ticketPrice {
+				amount = ticketPrice
+			}
+		}
+
+		waitGroup.Go(func() {
+			eventFailedRefundOrCancel := EventDetailFailedRefundOrCancel{}
+
+			updatePaymentParams := database.UpdatePaymentParams{
+				ID: paidEventDetailForRefund.PaymentID,
+				Amount: fmt.Sprintf("%.2f", float64(amount)/100.0),
+				PaymentIntentID: paidEventDetailForRefund.PaymentIntentID,
+				UserID: userID,
+			}
+
+			createPaymentLogParams := database.CreatePaymentLogParams{
+				ID: uuid.New(),
+				PaymentIntentID: paidEventDetailForRefund.PaymentIntentID.String, 
+				Amount: fmt.Sprintf("%.2f", float64(amount)/100.0),
+				UserEmail: userEmail,
+				PaymentID: paidEventDetailForRefund.PaymentID,
+			}
+
+			if paidEventDetailForRefund.Status == string(stripe.PaymentIntentStatusSucceeded) {
+				refundResult, refundError := service.Stripe.Refund(amount, paidEventDetailForRefund.PaymentIntentID.String)
+
+				if refundError != nil {
+					service.Mailer.SendRefundErrorNotification()
+
+					if stripeError, ok := refundError.(*stripe.Error); ok {
+						createPaymentLogParams.Status = string(stripeError.Code)
+						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+
+						eventFailedRefundOrCancel.PaymentID = paidEventDetailForRefund.PaymentID
+						eventFailedRefundOrCancel.Action = "stripe refund request"
+						eventFailedRefundOrCancel.Code = string(stripeError.Code)
+						eventFailedRefundOrCancel.Message = stripeError.Msg
+
+						isErrorOccured = true
+					}
+				}
+
+				if refundResult != nil {
+					createPaymentLogParams.Status = string(refundResult.Status)
+
+					switch refundResult.Status {
+						case stripe.RefundStatusFailed:
+							createPaymentLogParams.Description = common.StringToNullString(string(refundResult.FailureReason))
+						case stripe.RefundStatusPending:
+							createPaymentLogParams.Description = common.StringToNullString("refund pending")
+							updatePaymentParams.Status = "refund pending"
+						case stripe.RefundStatusSucceeded:
+							createPaymentLogParams.Description = common.StringToNullString("refund succeeded")
+							updatePaymentParams.Status = "refunded"
+					}
+				}
+			} else {
+				paymentIntentCancelError := service.Stripe.CancelPaymentIntent(paidEventDetailForRefund.PaymentIntentID.String, "abandoned")
+
+				if paymentIntentCancelError != nil {
+					if stripeError, ok := paymentIntentCancelError.(*stripe.Error); ok {
+						createPaymentLogParams.Status = string(stripeError.Code)
+						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+
+						eventFailedRefundOrCancel.PaymentID = paidEventDetailForRefund.PaymentID
+						eventFailedRefundOrCancel.Action = "stripe cancel request"
+						eventFailedRefundOrCancel.Code = string(stripeError.Code)
+						eventFailedRefundOrCancel.Message = stripeError.Msg
+						isErrorOccured = true
+					}
+				} else {
+					updatePaymentParams.Status = "cancelled"
+					createPaymentLogParams.Status = "cancelled"
+					createPaymentLogParams.Description = common.StringToNullString("event detail deleted")
+				}
+			}
+
+			// Create payment log.
+			service.DBQueries.CreatePaymentLog(ctx, createPaymentLogParams)
+
+			if isErrorOccured {
+				mutex.Lock()
+				eventDetailFailedRefundOrCancels = append(eventDetailFailedRefundOrCancels, eventFailedRefundOrCancel)
+				mutex.Unlock()
+				return
+			}
+
+			// Update payment.
+			service.DBQueries.UpdatePayment(ctx, updatePaymentParams)
+
+			mutex.Lock()
+			PaymentIDs = append(PaymentIDs, paidEventDetailForRefund.PaymentID)
+			mutex.Unlock()
+		})
+	}
+
+	waitGroup.Wait()
+	
+	if len(PaymentIDs) == 0 {
+		return eventDetailFailedRefundOrCancels, nil, nil
+	}
+
+	payments, _ := service.DBQueries.GetMultiplePayments(ctx, PaymentIDs)
+
+	var (
+		sendRefundCanceWaitGroup sync.WaitGroup
+		sendRefundCancelNotifErrorChannel = make(chan error, len(payments))
+	)
+
+	for _, pymnt := range payments {
+		payment := pymnt
+
+		sendRefundCanceWaitGroup.Go(func() {
+			
+			user, getUserByIdError := service.DBQueries.GetUserById(ctx, payment.UserID)
+
+			if getUserByIdError != nil {
+				sendRefundCancelNotifErrorChannel <- fmt.Errorf("failed to get user email for payment %s: %w", payment.ID, getUserByIdError)
+
+				return
+			}
+
+			eventTitle := paidEventDetailForRefunds[0].Title
+			ticketDescription := paidEventDetailForRefunds[0].TicketDescription
+			recipientName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
+			refundOrCancelledNotifMessage := fmt.Sprintf(`Hi %s,
+
+The event reservation you've booked: %s - %s, was cancelled and your payment was refunded. 
+If you didn't pay yet, the pending payment is now cancelled.
+Sorry for the inconvencience.
+
+- Event - MRS Team`, recipientName, eventTitle, ticketDescription)
+
+			sendRefundCancelError := service.Mailer.SendRefundOrCancelledEmail(recipientName, user.Email, eventTitle, refundOrCancelledNotifMessage)
+
+			if sendRefundCancelError != nil {
+				sendRefundCancelNotifErrorChannel <- sendRefundCancelError
+			}
+		})
+	}
+
+	sendRefundCanceWaitGroup.Wait()
+	close(sendRefundCancelNotifErrorChannel)
+
+	failedNotificationEmails := []FailedNotificationEmail{}
+
+	for errorMessage := range sendRefundCancelNotifErrorChannel {
+		if errorMessage != nil {
+			failedNotificationEmails = append(failedNotificationEmails, FailedNotificationEmail{
+				SendRefundCancelNotificationError: errorMessage.Error(),
+			})
+		}
+	}
+
+	return eventDetailFailedRefundOrCancels, failedNotificationEmails, nil
 }

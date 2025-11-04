@@ -70,10 +70,13 @@ func main() {
 		APIKey: envConfig.MailgunAPIKey,
 		SenderName: envConfig.SenderName,
 		SenderEmail: envConfig.SenderEmail,
+		TeamName: envConfig.TeamName,
+		TeamEmail: envConfig.TeamEmail,
 	}
 	newMailer := mailer.NewMailer(mailerConfig)
 	stripe.Key = envConfig.StripeSecretKey
 	stripeClient := &events.StripeAPIClient{}
+
 	eventService := events.NewService(*dbQueries, newMailer, stripeClient)
 
 	eventAPIConfig := events.EventAPIConfig{
@@ -87,8 +90,11 @@ func main() {
 	routerWithAuthorization.PUT("/events/:eventId", eventAPIConfig.UpdateEvent)
 	routerWithAuthorization.DELETE("/events/:eventId", eventAPIConfig.DeleteEvent)
 
+	stripeClientEventDetails := &event_details.StripeAPIClient{}
+	eventDetailService := event_details.NewService(*dbQueries, newMailer, stripeClientEventDetails)
+	
 	eventDetailAPIConfig := event_details.EventDetailAPIConfig{
-		DB: dbQueries,
+		Service: eventDetailService,
 	}
 
 	routerWithAuthorization.POST("/events/:eventId/details", eventDetailAPIConfig.CreateEventDetail)
