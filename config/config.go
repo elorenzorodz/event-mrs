@@ -16,6 +16,8 @@ type AppConfig struct {
 	SenderEmail          string
 	StripeSecretKey      string
 	StripeSigningSecret  string
+	TeamName string
+	TeamEmail string
 }
 
 func getEnvironmentVariable(key string) (string, error) {
@@ -43,6 +45,8 @@ func LoadEnvironmentVariables() (AppConfig, error) {
 	if appConfig.SenderEmail, err = getEnvironmentVariable("SENDER_EMAIL"); err != nil { return appConfig, err }
 	if appConfig.StripeSecretKey, err = getEnvironmentVariable("STRIPE_SECRET_KEY"); err != nil { return appConfig, err }
 	if appConfig.StripeSigningSecret, err = getEnvironmentVariable("STRIPE_SIGNING_SECRET"); err != nil { return appConfig, err }
+	if appConfig.TeamName, err = getEnvironmentVariable("TEAM_NAME"); err != nil { return appConfig, err }
+	if appConfig.TeamEmail, err = getEnvironmentVariable("TEAM_EMAIL"); err != nil { return appConfig, err }
 
 	return appConfig, nil
 }

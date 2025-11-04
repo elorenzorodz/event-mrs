@@ -16,12 +16,16 @@ type MailerConfig struct {
 	APIKey      string
 	SenderName  string
 	SenderEmail string
+	TeamName    string
+	TeamEmail   string
 }
 
 type Mailer struct {
 	mg          *mailgun.MailgunImpl
 	senderName  string
 	senderEmail string
+	teamName    string
+	teamEmail   string
 }
 
 func NewMailer(mailerConfig MailerConfig) *Mailer {
@@ -31,6 +35,8 @@ func NewMailer(mailerConfig MailerConfig) *Mailer {
 		mg:          mg,
 		senderName:  mailerConfig.SenderName,
 		senderEmail: mailerConfig.SenderEmail,
+		teamName:    mailerConfig.TeamName,
+		teamEmail:   mailerConfig.TeamEmail,
 	}
 }
 
@@ -47,18 +53,17 @@ func (m *Mailer) SendPaymentConfirmationAndTicketReservation(recipientName strin
 
 	mailgunMessage := mailgun.NewMessage(
 		m.buildSender(),
-		"Your payment and ticket reservation are confirmed",
+		"Your payment and ticket reservation is confirmed",
 		fmt.Sprintf(`Hi %s,
 
-Thank you for your payment and ticket reservation. Below are your event details.
-
+You've successfully booked your events. Enjoy!
 %s
 
 - Event - MRS Team`, recipientName, eventConcat),
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
@@ -71,15 +76,70 @@ Thank you for your payment and ticket reservation. Below are your event details.
 	return nil
 }
 
-func (m *Mailer) SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string, refundOrCancelledNotifMessage string) error {
+func (m *Mailer) SendRefundOrCancelledEmail(recipientName string, recipientEmail string, eventTitle string, message string) error {
 	mailgunMessage := mailgun.NewMessage(
 		m.buildSender(),
-		"Your booked event was cancelled and/or refunded",
-		refundOrCancelledNotifMessage,
+		fmt.Sprintf("Your payment for %s was refunded/cancelled", eventTitle),
+		message,
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
+
+	if sendError != nil {
+		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func (m *Mailer) SendRefundErrorNotification() error {
+	mailgunMessage := mailgun.NewMessage(
+		m.buildSender(),
+		"A refund request has failed",
+		"A refund request has failed. Please check logs.",
+		fmt.Sprintf("%s <%s>", m.teamName, m.teamEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
+
+	if sendError != nil {
+		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, m.teamName, m.teamEmail, id, sendMessage, sendError)
+		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, m.teamName, m.teamEmail, id, sendMessage, sendError)
+	}
+
+	return nil
+}
+
+func (m *Mailer) SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+	eventConcat := ""
+	for _, eventDetail := range eventDetailsWithEventTitle {
+		eventConcat += fmt.Sprintf(`%s - %s - %s
+`, eventDetail.Title, eventDetail.TicketDescription, eventDetail.ShowDate)
+	}
+
+	mailgunMessage := mailgun.NewMessage(
+		m.buildSender(),
+		"Your payment failed",
+		fmt.Sprintf(`Hi %s,
+
+Your payment failed with the following issue: %s
+
+Reservation/s attached with the payment:
+%s
+
+- Event - MRS Team`, recipientName, errorMessage, eventConcat),
+		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
@@ -112,11 +172,11 @@ Description: %s
 		fmt.Sprintf("%s <%s>", recipientName, recipientEmail),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	sendMessage, id, sendError := m.mg.Send(ctx, mailgunMessage)
-	
+
 	if sendError != nil {
 		log.Printf("Mailgun error | Sender: %s <%s> | Recipient: %s <%s> | ID: %s | Message: %s | Error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
 		return fmt.Errorf("sender: %s <%s> | recipient: %s <%s> | ID: %s | message: %s | error: %s", m.senderName, m.senderEmail, recipientName, recipientEmail, id, sendMessage, sendError)
