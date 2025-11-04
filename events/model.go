@@ -13,7 +13,7 @@ import (
 
 type Event struct {
 	ID          uuid.UUID
-	UserID     uuid.UUID
+	UserID      uuid.UUID
 	Title       string
 	Description string
 	Organizer   string
@@ -74,16 +74,16 @@ type DeleteSummary struct {
 	FailedNotificationEmails   []FailedNotificationEmail
 }
 
-func NewEventResponse(e *Event) EventResponse {
+func NewEventResponse(event *Event) EventResponse {
 	return EventResponse{
-		ID:          e.ID,
-		UserID:      e.UserID,
-		Title:       e.Title,
-		Description: e.Description,
-		Organizer:   e.Organizer,
-		CreatedAt:   e.CreatedAt,
-		UpdatedAt:   e.UpdatedAt,
-		Tickets:     e.Tickets,
+		ID:          event.ID,
+		UserID:      event.UserID,
+		Title:       event.Title,
+		Description: event.Description,
+		Organizer:   event.Organizer,
+		CreatedAt:   event.CreatedAt,
+		UpdatedAt:   event.UpdatedAt,
+		Tickets:     event.Tickets,
 	}
 }
 

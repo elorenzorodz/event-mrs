@@ -8,9 +8,10 @@ import (
 	"log"
 	"sync"
 
-	"github.com/elorenzorodz/event-mrs/common"
+	"github.com/elorenzorodz/event-mrs/internal/convert"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/elorenzorodz/event-mrs/internal/mailer"
+	"github.com/elorenzorodz/event-mrs/internal/sqlutil"
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v83"
 	"github.com/stripe/stripe-go/v83/paymentintent"
@@ -45,7 +46,7 @@ func (stripeAPIClient *StripeAPIClient) CancelPaymentIntent(paymentIntentID stri
 }
 
 func (service *Service) Create(ctx context.Context, eventID uuid.UUID, req EventDetailParameters) (*EventDetail, error) {
-	showDate, _, parseShowDateError := common.StringToTime(req.ShowDate)
+	showDate, _, parseShowDateError := convert.StringToTime(req.ShowDate)
 
 	if parseShowDateError != nil {
 		return nil, parseShowDateError
@@ -77,7 +78,7 @@ func (service *Service) Create(ctx context.Context, eventID uuid.UUID, req Event
 }
 
 func (service *Service) Update(ctx context.Context, eventID, eventDetailID uuid.UUID, req EventDetailParameters) (*EventDetail, error) {
-	showDate, _, parseShowDateError := common.StringToTime(req.ShowDate)
+	showDate, _, parseShowDateError := convert.StringToTime(req.ShowDate)
 
 	if parseShowDateError != nil {
 		return nil, parseShowDateError
@@ -159,8 +160,8 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 
 	for _, paidEventDetail := range paidEventDetailForRefunds {
 		paidEventDetailForRefund := paidEventDetail
-		amount, _ := common.PriceStringToCents(paidEventDetailForRefund.Amount)
-		ticketPrice, _ := common.PriceStringToCents(paidEventDetailForRefund.TicketPrice)
+		amount, _ := convert.PriceStringToCents(paidEventDetailForRefund.Amount)
+		ticketPrice, _ := convert.PriceStringToCents(paidEventDetailForRefund.TicketPrice)
 		isErrorOccured := false
 
 		if paidEventDetailForRefund.Status == "refunded" || paidEventDetailForRefund.Status == "cancelled" {
@@ -206,7 +207,7 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 
 					if stripeError, ok := refundError.(*stripe.Error); ok {
 						createPaymentLogParams.Status = string(stripeError.Code)
-						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+						createPaymentLogParams.Description = sqlutil.StringToNullString(stripeError.Msg)
 
 						eventFailedRefundOrCancel.PaymentID = paidEventDetailForRefund.PaymentID
 						eventFailedRefundOrCancel.Action = "stripe refund request"
@@ -222,12 +223,12 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 
 					switch refundResult.Status {
 						case stripe.RefundStatusFailed:
-							createPaymentLogParams.Description = common.StringToNullString(string(refundResult.FailureReason))
+							createPaymentLogParams.Description = sqlutil.StringToNullString(string(refundResult.FailureReason))
 						case stripe.RefundStatusPending:
-							createPaymentLogParams.Description = common.StringToNullString("refund pending")
+							createPaymentLogParams.Description = sqlutil.StringToNullString("refund pending")
 							updatePaymentParams.Status = "refund pending"
 						case stripe.RefundStatusSucceeded:
-							createPaymentLogParams.Description = common.StringToNullString("refund succeeded")
+							createPaymentLogParams.Description = sqlutil.StringToNullString("refund succeeded")
 							updatePaymentParams.Status = "refunded"
 					}
 				}
@@ -237,7 +238,7 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 				if paymentIntentCancelError != nil {
 					if stripeError, ok := paymentIntentCancelError.(*stripe.Error); ok {
 						createPaymentLogParams.Status = string(stripeError.Code)
-						createPaymentLogParams.Description = common.StringToNullString(stripeError.Msg)
+						createPaymentLogParams.Description = sqlutil.StringToNullString(stripeError.Msg)
 
 						eventFailedRefundOrCancel.PaymentID = paidEventDetailForRefund.PaymentID
 						eventFailedRefundOrCancel.Action = "stripe cancel request"
@@ -248,7 +249,7 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 				} else {
 					updatePaymentParams.Status = "cancelled"
 					createPaymentLogParams.Status = "cancelled"
-					createPaymentLogParams.Description = common.StringToNullString("event detail deleted")
+					createPaymentLogParams.Description = sqlutil.StringToNullString("event detail deleted")
 				}
 			}
 
@@ -330,4 +331,30 @@ Sorry for the inconvencience.
 	}
 
 	return eventDetailFailedRefundOrCancels, failedNotificationEmails, nil
+}
+
+func DatabaseEventDetailToEventDetailJSON(databaseEventDetail database.EventDetail) EventDetail {
+	priceFloat, _ := convert.StringToFloat32(databaseEventDetail.Price)
+
+	return EventDetail{
+		ID:                databaseEventDetail.ID,
+		ShowDate:          databaseEventDetail.ShowDate,
+		Price:             priceFloat,
+		NumberOfTickets:   databaseEventDetail.NumberOfTickets,
+		TicketsRemaining:  databaseEventDetail.TicketsRemaining,
+		TicketDescription: databaseEventDetail.TicketDescription,
+		CreatedAt:         databaseEventDetail.CreatedAt,
+		UpdatedAt:         sqlutil.NullTimeToString(databaseEventDetail.UpdatedAt),
+		EventID:           databaseEventDetail.EventID,
+	}
+}
+
+func DatabaseEventDetailsToEventDetailsJSON(databaseEventDetails []database.EventDetail) []EventDetail {
+	eventDetails := make([]EventDetail, len(databaseEventDetails))
+
+	for i, databaseEventDetail := range databaseEventDetails {
+		eventDetails[i] = DatabaseEventDetailToEventDetailJSON(databaseEventDetail)
+	}
+
+	return eventDetails
 }

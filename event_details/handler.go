@@ -5,35 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/elorenzorodz/event-mrs/common"
-	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/elorenzorodz/event-mrs/internal/convert"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-func DatabaseEventDetailToEventDetailJSON(databaseEventDetail database.EventDetail) EventDetail {
-	return EventDetail{
-		ID:                databaseEventDetail.ID,
-		ShowDate:          databaseEventDetail.ShowDate,
-		Price:             common.StringToFloat32(databaseEventDetail.Price),
-		NumberOfTickets:   databaseEventDetail.NumberOfTickets,
-		TicketsRemaining:  databaseEventDetail.TicketsRemaining,
-		TicketDescription: databaseEventDetail.TicketDescription,
-		CreatedAt:         databaseEventDetail.CreatedAt,
-		UpdatedAt:         common.NullTimeToString(databaseEventDetail.UpdatedAt),
-		EventID:           databaseEventDetail.EventID,
-	}
-}
-
-func DatabaseEventDetailsToEventDetailsJSON(databaseEventDetails []database.EventDetail) []EventDetail {
-	eventDetails := make([]EventDetail, len(databaseEventDetails))
-
-	for i, databaseEventDetail := range databaseEventDetails {
-		eventDetails[i] = DatabaseEventDetailToEventDetailJSON(databaseEventDetail)
-	}
-
-	return eventDetails
-}
 
 func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *gin.Context) {
 	eventID, parseEventIDError := uuid.Parse(ginContext.Param("eventId"))
@@ -54,7 +29,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 	createdEventDetail, createEventDetailError := eventDetailAPIConfig.Service.Create(ginContext.Request.Context(), eventID, eventDetailParams)
 
 	if createEventDetailError != nil {
-		if _, _, parseError := common.StringToTime(eventDetailParams.ShowDate); parseError != nil {
+		if _, _, parseError := convert.StringToTime(eventDetailParams.ShowDate); parseError != nil {
 			ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date: %v", parseError.Error())})
 
 			return
@@ -95,7 +70,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) UpdateEventDetail(ginContext *
 	updatedEventDetail, updateEventDetailError := eventDetailAPIConfig.Service.Update(ginContext.Request.Context(), eventID, eventDetailID, eventDetailParams)
 
 	if updateEventDetailError != nil {
-		if _, _, parseError := common.StringToTime(eventDetailParams.ShowDate); parseError != nil {
+		if _, _, parseError := convert.StringToTime(eventDetailParams.ShowDate); parseError != nil {
 			ginContext.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing show date: %v", parseError.Error())})
 
 			return
