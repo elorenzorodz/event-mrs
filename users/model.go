@@ -61,3 +61,7 @@ type Service struct {
 	DBQueries *database.Queries 
 	TokenGenerator auth.TokenGenerator 
 }
+
+type UserAPIConfig struct {
+	Service UserService
+}

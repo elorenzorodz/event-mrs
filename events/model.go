@@ -1,10 +1,14 @@
 package events
 
 import (
+	"context"
 	"time"
 
 	"github.com/elorenzorodz/event-mrs/event_details"
+	"github.com/elorenzorodz/event-mrs/internal/database"
+	"github.com/elorenzorodz/event-mrs/internal/mailer"
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v83"
 )
 
 type Event struct {
@@ -81,4 +85,30 @@ func NewEventResponse(e *Event) EventResponse {
 		UpdatedAt:   e.UpdatedAt,
 		Tickets:     e.Tickets,
 	}
+}
+
+type StripeClient interface {
+	Refund(amount int64, paymentIntentID string) (*stripe.Refund, error)
+	CancelPaymentIntent(paymentIntentID string) error
+}
+
+type StripeAPIClient struct{}
+
+type EventService interface {
+	Create(ctx context.Context, ownerID uuid.UUID, req CreateEventRequest) (*Event, error)
+	GetEventsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Event, error)
+	GetEventByID(ctx context.Context, eventID, ownerID uuid.UUID) (*Event, error)
+	Update(ctx context.Context, eventID, ownerID uuid.UUID, req UpdateEventRequest) (*Event, error)
+	Delete(ctx context.Context, eventID, ownerID uuid.UUID, userEmail string) (*DeleteSummary, error)
+	SearchEvents(ctx context.Context, searchQuery, startShowDateQuery, endShowDateQuery string) ([]SearchEventResponse, error)
+}
+
+type Service struct {
+	DBQueries database.Queries
+	Mailer    *mailer.Mailer
+	Stripe    StripeClient
+}
+
+type EventAPIConfig struct {
+	Service EventService
 }

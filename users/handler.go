@@ -6,10 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type UserAPIConfig struct {
-	Service UserService
-}
-
 func (userAPIConfig *UserAPIConfig) RegisterUser(ginContext *gin.Context) {
 	var registerRequest RegisterRequest
 

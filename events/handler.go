@@ -10,10 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type EventAPIConfig struct {
-	Service EventService
-}
-
 func getOwnerIDFromContext(ginContext *gin.Context) (uuid.UUID, error) {
 	ownerID, exists := ginContext.Get("userId")
 
