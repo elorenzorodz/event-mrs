@@ -1,6 +1,12 @@
 package users
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/elorenzorodz/event-mrs/internal/auth"
+	"github.com/elorenzorodz/event-mrs/internal/database"
+)
 
 type User struct {
 	ID        string
@@ -44,4 +50,14 @@ func NewUserResponse(user *User) UserResponse {
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
 	}
+}
+
+type UserService interface {
+	Register(ctx context.Context, req RegisterRequest) (*User, error)
+	Login(ctx context.Context, req LoginRequest) (*UserAuthorized, error)
+}
+
+type Service struct {
+	DBQueries *database.Queries 
+	TokenGenerator auth.TokenGenerator 
 }

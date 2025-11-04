@@ -18,19 +18,9 @@ var (
 	ErrPasswordWeak    = errors.New("invalid password, password must contain at least 1 upper case letter, 1 lower case letter, 1 digit and must be 12 to 20 characters long")
 )
 
-type UserService interface {
-	Register(ctx context.Context, req RegisterRequest) (*User, error)
-	Login(ctx context.Context, req LoginRequest) (*UserAuthorized, error)
-}
-
-type Service struct {
-	DBQueries *database.Queries 
-	TokenGenerator auth.TokenGenerator 
-}
-
 func NewService(dbQueries *database.Queries, tokenGenerator auth.TokenGenerator) UserService {
 	return &Service{
-		DBQueries: dbQueries,
+		DBQueries:      dbQueries,
 		TokenGenerator: tokenGenerator,
 	}
 }
@@ -42,25 +32,25 @@ func (service *Service) Register(ctx context.Context, req RegisterRequest) (*Use
 	if !validation.IsPasswordValid(req.Password) {
 		return nil, ErrPasswordWeak
 	}
-	
+
 	hashedPassword, hashPasswordError := auth.HashPassword(req.Password)
 	if hashPasswordError != nil {
 		log.Printf("Error hashing password: %s", hashPasswordError)
 		return nil, errors.New("internal server error")
 	}
 
-	createUserParams := database.CreateUserParams {
-		ID: uuid.New(),
+	createUserParams := database.CreateUserParams{
+		ID:        uuid.New(),
 		Firstname: req.FirstName,
-		Lastname: req.LastName,
-		Email: req.Email,
-		Password: hashedPassword,
+		Lastname:  req.LastName,
+		Email:     req.Email,
+		Password:  hashedPassword,
 	}
-	
+
 	newUserDB, createUserError := service.DBQueries.CreateUser(ctx, createUserParams)
 
 	if createUserError != nil {
-		return nil, ErrEmailExists 
+		return nil, ErrEmailExists
 	}
 
 	return databaseUserToDomainUser(newUserDB), nil
@@ -70,13 +60,13 @@ func (service *Service) Login(ctx context.Context, req LoginRequest) (*UserAutho
 	getUserDB, getUserError := service.DBQueries.GetUserByEmail(ctx, req.Email)
 
 	if getUserError != nil {
-		return nil, ErrPasswordInvalid 
+		return nil, ErrPasswordInvalid
 	}
 
 	verifyPasswordError := auth.VerifyPassword(req.Password, getUserDB.Password)
 
 	if verifyPasswordError != nil {
-		return nil, ErrPasswordInvalid 
+		return nil, ErrPasswordInvalid
 	}
 
 	signedToken, signedTokenError := service.TokenGenerator.Generate(getUserDB.Email)
@@ -87,7 +77,7 @@ func (service *Service) Login(ctx context.Context, req LoginRequest) (*UserAutho
 	}
 
 	return &UserAuthorized{
-		Email: getUserDB.Email,
+		Email:       getUserDB.Email,
 		AccessToken: signedToken,
 	}, nil
 }
@@ -99,7 +89,7 @@ func databaseUserToDomainUser(dbUser database.User) *User {
 	}
 
 	return &User{
-		ID:        dbUser.ID.String(), 
+		ID:        dbUser.ID.String(),
 		FirstName: dbUser.Firstname,
 		LastName:  dbUser.Lastname,
 		Email:     dbUser.Email,
