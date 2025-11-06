@@ -101,8 +101,11 @@ func main() {
 	routerWithAuthorization.PUT("/events/:eventId/details/:eventDetailId", eventDetailAPIConfig.UpdateEventDetail)
 	routerWithAuthorization.DELETE("/events/:eventId/details/:eventDetailId", eventDetailAPIConfig.DeleteEventDetail)
 
+	stripeClientReservation := &reservations.StripeAPIClient{}
+	reservationService := reservations.NewService(*dbQueries, dbConnection, newMailer, stripeClientReservation)
 	reservationAPIConfig := reservations.ReservationAPIConfig{
-		DB: dbQueries,
+		Service: reservationService,
+
 	}
 
 	routerWithAuthorization.GET("/reservations", reservationAPIConfig.GetUserReservations)
