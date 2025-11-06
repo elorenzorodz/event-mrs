@@ -297,7 +297,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 						eventDetailIds = append(eventDetailIds, userReservation.EventDetailID)
 					}
 
-					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GethEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
+					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GetEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
 
 					fullName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
 
@@ -327,7 +327,7 @@ func (paymentAPIConfig *PaymentAPIConfig) StripeWebhook(ginContext *gin.Context)
 						eventDetailIds = append(eventDetailIds, userReservation.EventDetailID)
 					}
 
-					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GethEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
+					eventDetailsWithEventTitle, _ := paymentAPIConfig.DB.GetEventDetailsWithTitleByIds(ginContext.Request.Context(), eventDetailIds)
 
 					fullName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
 

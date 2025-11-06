@@ -1,11 +1,11 @@
 -- name: ReserveTicket :one 
 WITH params AS (
     SELECT 
-        $1::uuid AS event_detail_id, 
-        $2::uuid AS reservation_id, 
-        $3::text AS email,
-        $4::uuid AS user_id,
-        $5::uuid AS payment_id), 
+        @event_detail_id::uuid AS event_detail_id, 
+        @reservation_id::uuid AS reservation_id, 
+        @email::text AS email,
+        @user_id::uuid AS user_id,
+        @payment_id::uuid AS payment_id), 
 updated_event_detail AS ( 
     UPDATE event_details ed 
     SET tickets_remaining = ed.tickets_remaining - 1 

@@ -138,20 +138,20 @@ RETURNING id AS id, email AS email, created_at AS created_at, updated_at AS upda
 `
 
 type ReserveTicketParams struct {
-	Column1 uuid.UUID
-	Column2 uuid.UUID
-	Column3 string
-	Column4 uuid.UUID
-	Column5 uuid.UUID
+	EventDetailID uuid.UUID
+	ReservationID uuid.UUID
+	Email         string
+	UserID        uuid.UUID
+	PaymentID     uuid.UUID
 }
 
 func (q *Queries) ReserveTicket(ctx context.Context, arg ReserveTicketParams) (Reservation, error) {
 	row := q.db.QueryRowContext(ctx, reserveTicket,
-		arg.Column1,
-		arg.Column2,
-		arg.Column3,
-		arg.Column4,
-		arg.Column5,
+		arg.EventDetailID,
+		arg.ReservationID,
+		arg.Email,
+		arg.UserID,
+		arg.PaymentID,
 	)
 	var i Reservation
 	err := row.Scan(

@@ -127,6 +127,59 @@ func (q *Queries) GetEventDetailsById(ctx context.Context, id uuid.UUID) (EventD
 	return i, err
 }
 
+const getEventDetailsWithTitleByIds = `-- name: GetEventDetailsWithTitleByIds :many
+SELECT 
+    ed.id, 
+	e.title,
+	ed.ticket_description,
+	ed.show_date,
+    ed.tickets_remaining,
+    ed.price
+FROM event_details AS ed
+JOIN events AS e
+	ON e.id = ed.event_id
+WHERE ed.id = ANY($1)
+`
+
+type GetEventDetailsWithTitleByIdsRow struct {
+	ID                uuid.UUID
+	Title             string
+	TicketDescription string
+	ShowDate          time.Time
+	TicketsRemaining  int32
+	Price             string
+}
+
+func (q *Queries) GetEventDetailsWithTitleByIds(ctx context.Context, id []uuid.UUID) ([]GetEventDetailsWithTitleByIdsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getEventDetailsWithTitleByIds, pq.Array(id))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEventDetailsWithTitleByIdsRow
+	for rows.Next() {
+		var i GetEventDetailsWithTitleByIdsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.TicketDescription,
+			&i.ShowDate,
+			&i.TicketsRemaining,
+			&i.Price,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPaidEventDetailForRefund = `-- name: GetPaidEventDetailForRefund :many
 SELECT
     p.id AS payment_id,
@@ -182,46 +235,6 @@ func (q *Queries) GetPaidEventDetailForRefund(ctx context.Context, arg GetPaidEv
 			&i.TicketDescription,
 			&i.TicketPrice,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const gethEventDetailsWithTitleByIds = `-- name: GethEventDetailsWithTitleByIds :many
-SELECT 
-	e.title,
-	ed.ticket_description,
-	ed.show_date
-FROM event_details AS ed
-JOIN events AS e
-	ON e.id = ed.event_id
-WHERE ed.id = ANY($1)
-`
-
-type GethEventDetailsWithTitleByIdsRow struct {
-	Title             string
-	TicketDescription string
-	ShowDate          time.Time
-}
-
-func (q *Queries) GethEventDetailsWithTitleByIds(ctx context.Context, id []uuid.UUID) ([]GethEventDetailsWithTitleByIdsRow, error) {
-	rows, err := q.db.QueryContext(ctx, gethEventDetailsWithTitleByIds, pq.Array(id))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GethEventDetailsWithTitleByIdsRow
-	for rows.Next() {
-		var i GethEventDetailsWithTitleByIdsRow
-		if err := rows.Scan(&i.Title, &i.TicketDescription, &i.ShowDate); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

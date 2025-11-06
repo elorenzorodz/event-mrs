@@ -20,6 +20,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 	}
 
 	eventDetailParams := EventDetailParameters{}
+	
 	if parameterBindError := ginContext.ShouldBindJSON(&eventDetailParams); parameterBindError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present and/or numbers are not be quoted"})
 
@@ -34,6 +35,7 @@ func (eventDetailAPIConfig *EventDetailAPIConfig) CreateEventDetail(ginContext *
 
 			return
 		}
+
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": createEventDetailError.Error()})
 
 		return

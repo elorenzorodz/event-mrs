@@ -44,7 +44,7 @@ func (m *Mailer) buildSender() string {
 	return fmt.Sprintf("%s <%s>", m.senderName, m.senderEmail)
 }
 
-func (m *Mailer) SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+func (m *Mailer) SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GetEventDetailsWithTitleByIdsRow) error {
 	eventConcat := ""
 	for _, eventDetail := range eventDetailsWithEventTitle {
 		eventConcat += fmt.Sprintf(`%s - %s - %s
@@ -118,7 +118,7 @@ func (m *Mailer) SendRefundErrorNotification() error {
 	return nil
 }
 
-func (m *Mailer) SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+func (m *Mailer) SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GetEventDetailsWithTitleByIdsRow) error {
 	eventConcat := ""
 	for _, eventDetail := range eventDetailsWithEventTitle {
 		eventConcat += fmt.Sprintf(`%s - %s - %s

@@ -23,7 +23,7 @@ func initializeMailgun() (string, string, *mailgun.MailgunImpl){
 	return senderName, senderEmail, mg
 }
 
-func SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+func SendPaymentConfirmationAndTicketReservation(recipientName string, recipientEmail string, eventDetailsWithEventTitle []database.GetEventDetailsWithTitleByIdsRow) error {
 	senderName, senderEmail, mg := initializeMailgun()
 	
 	eventConcat := ""
@@ -110,7 +110,7 @@ func SendRefundErrorNotification() error {
 	return nil
 }
 
-func SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GethEventDetailsWithTitleByIdsRow) error {
+func SendPaymentFailedNotification(recipientName string, recipientEmail string, errorMessage string, eventDetailsWithEventTitle []database.GetEventDetailsWithTitleByIdsRow) error {
 	senderName, senderEmail, mg := initializeMailgun()
 
 	eventConcat := ""
