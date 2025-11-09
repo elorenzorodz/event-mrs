@@ -113,12 +113,14 @@ func main() {
 	routerWithAuthorization.POST("/reservations", reservationAPIConfig.CreateReservation)
 	routerWithAuthorization.PATCH("/reservations/:reservationId", reservationAPIConfig.UpdateReservationEmail)
 
+	stripeClientPayment := &payments.StripeAPIClient{}
+	paymentService := payments.NewService(dbQueries, stripeClientPayment, newMailer, envConfig.StripeSigningSecret, envConfig.StripeRefundSigningSecret)
 	paymentAPIConfig := payments.PaymentAPIConfig{
-		DB: dbQueries,
+		Service: paymentService,
 	}
 
-	routerAPIPrefix.POST("/payments/webhook", paymentAPIConfig.StripeWebhook)
-	routerAPIPrefix.POST("/payments/refund-webhook", paymentAPIConfig.StripeRefundWebhook)
+	routerAPIPrefix.POST("/payments/webhook", paymentAPIConfig.HandleStripeWebhook)
+	routerAPIPrefix.POST("/payments/refund-webhook", paymentAPIConfig.HandleStripeRefundWebhook)
 	routerWithAuthorization.GET("/payments", paymentAPIConfig.GetUserPayments)
 	routerWithAuthorization.GET("/payments/:paymentId", paymentAPIConfig.GetUserPaymentById)
 	routerWithAuthorization.PATCH("/payments/:paymentId", paymentAPIConfig.UpdatePayment)

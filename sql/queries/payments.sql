@@ -59,8 +59,8 @@ ON ed.id = r.event_detail_id
 LEFT JOIN events AS e
 ON e.id = ed.event_id 
 WHERE 
-	p.id = $1
-	AND p.user_id = $2;
+	p.id = @payment_id::uuid
+	AND p.user_id = @user_id::uuid;
 
 -- name: RefundPaymentAndRestoreTickets :exec
 WITH event_details_update AS (

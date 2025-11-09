@@ -112,13 +112,13 @@ ON ed.id = r.event_detail_id
 LEFT JOIN events AS e
 ON e.id = ed.event_id 
 WHERE 
-	p.id = $1
-	AND p.user_id = $2
+	p.id = $1::uuid
+	AND p.user_id = $2::uuid
 `
 
 type GetPaymentAndReservationDetailsParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+	PaymentID uuid.UUID
+	UserID    uuid.UUID
 }
 
 type GetPaymentAndReservationDetailsRow struct {
@@ -137,7 +137,7 @@ type GetPaymentAndReservationDetailsRow struct {
 }
 
 func (q *Queries) GetPaymentAndReservationDetails(ctx context.Context, arg GetPaymentAndReservationDetailsParams) ([]GetPaymentAndReservationDetailsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getPaymentAndReservationDetails, arg.ID, arg.UserID)
+	rows, err := q.db.QueryContext(ctx, getPaymentAndReservationDetails, arg.PaymentID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

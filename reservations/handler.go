@@ -115,6 +115,7 @@ func (reservationAPIConfig *ReservationAPIConfig) UpdateReservationEmail(ginCont
 	}
 
 	patchReservationParams := PatchReservationParameters{}
+	
 	if parameterBindError := ginContext.ShouldBindJSON(&patchReservationParams); parameterBindError != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "error parsing JSON, please check all required fields are present"})
 

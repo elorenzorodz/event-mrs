@@ -66,9 +66,6 @@ func LoadEnvironmentVariables() (AppConfig, error) {
 	if appConfig.StripeSigningSecret, err = getEnvironmentVariable("STRIPE_SIGNING_SECRET"); err != nil {
 		return appConfig, err
 	}
-	if appConfig.StripeRefundSigningSecret, err = getEnvironmentVariable("STRIPE_WEBHOOK_SECRET"); err != nil {
-		return appConfig, err
-	}
 	if appConfig.StripeRefundSigningSecret, err = getEnvironmentVariable("STRIPE_REFUND_SIGNING_SECRET"); err != nil {
 		return appConfig, err
 	}
