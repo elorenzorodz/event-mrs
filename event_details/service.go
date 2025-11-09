@@ -151,6 +151,19 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 		return nil, nil, nil
 	}
 
+	uniquePaymentsToProcess := make(map[string]database.GetPaidEventDetailForRefundRow)
+
+	for _, detail := range paidEventDetailForRefunds {
+		// Use the PaymentIntentID as the unique key for Stripe actions.
+		if detail.PaymentIntentID.Valid {
+			uniquePaymentsToProcess[detail.PaymentIntentID.String] = detail
+		}
+	}
+
+	if len(uniquePaymentsToProcess) == 0 {
+		return nil, nil, nil
+	}
+
 	var (
 		PaymentIDs []uuid.UUID
 		mutex sync.Mutex
@@ -158,8 +171,10 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 		eventDetailFailedRefundOrCancels []EventDetailFailedRefundOrCancel
 	)
 
-	for _, paidEventDetail := range paidEventDetailForRefunds {
-		paidEventDetailForRefund := paidEventDetail
+	// Iterate over the map of unique payment intents.
+	for _, eventDetailForRefund := range uniquePaymentsToProcess {
+		paidEventDetailForRefund := eventDetailForRefund
+		
 		amount, _ := convert.PriceStringToCents(paidEventDetailForRefund.Amount)
 		ticketPrice, _ := convert.PriceStringToCents(paidEventDetailForRefund.TicketPrice)
 		isErrorOccured := false
@@ -168,14 +183,15 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 			continue
 		}
 
+		// Handle free/unpaid tickets outside the goroutine as it involves no Stripe action.
 		if amount == 0 || ticketPrice == 0 {
-			// Skip Stripe processing for free/unpaid tickets, but collect ID for email notification.
 			mutex.Lock()
 			PaymentIDs = append(PaymentIDs, paidEventDetailForRefund.PaymentID)
 			mutex.Unlock()
 
 			continue
 		} else {
+			// This is the partial refund amount for this specific ticket price.
 			if amount != ticketPrice {
 				amount = ticketPrice
 			}
@@ -278,6 +294,7 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 		return eventDetailFailedRefundOrCancels, nil, nil
 	}
 
+	// Get payments for notification. Only pass unique IDs.
 	payments, _ := service.DBQueries.GetMultiplePayments(ctx, PaymentIDs)
 
 	var (
@@ -298,6 +315,9 @@ func (service *Service) EventDetailRefundOrCancelPayment(ctx context.Context, ev
 				return
 			}
 
+			// NOTE: We rely on the first entry in paidEventDetailForRefunds for event/ticket details for the email,
+			// which is potentially inaccurate if the refund covers multiple events.
+			// Using the first entry from the original query results for generic details.
 			eventTitle := paidEventDetailForRefunds[0].Title
 			ticketDescription := paidEventDetailForRefunds[0].TicketDescription
 			recipientName := fmt.Sprintf("%s %s", user.Firstname, user.Lastname)
