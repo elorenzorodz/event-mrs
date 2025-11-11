@@ -462,7 +462,7 @@ func (service *Service) eventRefundOrCancelPayment(ctx context.Context, eventId 
 				ID:              paidEventForRefund.PaymentID,
 				Amount:          fmt.Sprintf("%.2f", float64(amount)/100.0),
 				PaymentIntentID: paidEventForRefund.PaymentIntentID,
-				UserID:          userId,
+				UserID:          paidEventForRefund.PayerUserID,
 			}
 
 			if paidEventForRefund.Status == string(stripe.PaymentIntentStatusSucceeded) {

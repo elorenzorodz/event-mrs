@@ -194,6 +194,7 @@ const getPaidEventForRefund = `-- name: GetPaidEventForRefund :many
 SELECT
     p.id AS payment_id,
     p.payment_intent_id,
+	p.user_id AS payer_user_id,
     p.amount,
     p.status,
 	e.title,
@@ -205,10 +206,8 @@ JOIN reservations AS r
     ON r.event_detail_id = ed.id
 JOIN payments AS p
     ON p.id = r.payment_id
-JOIN users AS u
-    ON u.id = p.user_id
 WHERE e.id = $1::uuid AND e.user_id = $2::uuid
-GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price
+GROUP BY p.id, p.payment_intent_id, p.user_id, p.amount, p.status, e.title, ed.price
 `
 
 type GetPaidEventForRefundParams struct {
@@ -219,6 +218,7 @@ type GetPaidEventForRefundParams struct {
 type GetPaidEventForRefundRow struct {
 	PaymentID       uuid.UUID
 	PaymentIntentID sql.NullString
+	PayerUserID     uuid.UUID
 	Amount          string
 	Status          string
 	Title           string
@@ -237,6 +237,7 @@ func (q *Queries) GetPaidEventForRefund(ctx context.Context, arg GetPaidEventFor
 		if err := rows.Scan(
 			&i.PaymentID,
 			&i.PaymentIntentID,
+			&i.PayerUserID,
 			&i.Amount,
 			&i.Status,
 			&i.Title,

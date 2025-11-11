@@ -46,6 +46,7 @@ AND (ed.show_date >= $4 AND ed.show_date <= $5);
 SELECT
     p.id AS payment_id,
     p.payment_intent_id,
+	p.user_id AS payer_user_id,
     p.amount,
     p.status,
 	e.title,
@@ -57,10 +58,8 @@ JOIN reservations AS r
     ON r.event_detail_id = ed.id
 JOIN payments AS p
     ON p.id = r.payment_id
-JOIN users AS u
-    ON u.id = p.user_id
 WHERE e.id = @event_id::uuid AND e.user_id = @user_id::uuid
-GROUP BY p.id, p.payment_intent_id, p.amount, p.status, e.title, ed.price;
+GROUP BY p.id, p.payment_intent_id, p.user_id, p.amount, p.status, e.title, ed.price;
 
 -- name: GetEventConfirmedUserReservations :many
 SELECT 
