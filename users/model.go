@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/elorenzorodz/event-mrs/config"
 	"github.com/elorenzorodz/event-mrs/internal/auth"
-	"github.com/elorenzorodz/event-mrs/internal/database"
 )
 
 type User struct {
@@ -58,7 +58,7 @@ type UserService interface {
 }
 
 type Service struct {
-	DBQueries *database.Queries 
+	DBQueries config.DBQueries 
 	TokenGenerator auth.TokenGenerator 
 }
 

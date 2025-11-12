@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/elorenzorodz/event-mrs/config"
 	"github.com/elorenzorodz/event-mrs/internal/auth"
 	"github.com/elorenzorodz/event-mrs/internal/database"
 	"github.com/elorenzorodz/event-mrs/internal/validation"
@@ -18,7 +19,7 @@ var (
 	ErrPasswordWeak    = errors.New("invalid password, password must contain at least 1 upper case letter, 1 lower case letter, 1 digit and must be 12 to 20 characters long")
 )
 
-func NewService(dbQueries *database.Queries, tokenGenerator auth.TokenGenerator) UserService {
+func NewService(dbQueries config.DBQueries, tokenGenerator auth.TokenGenerator) UserService {
 	return &Service{
 		DBQueries:      dbQueries,
 		TokenGenerator: tokenGenerator,
