@@ -154,9 +154,17 @@ func TestRegister(tTesting *testing.T) {
 				if user == nil {
 					t.Fatal("Expected non-nil user")
 				}
-				// Only assert on non-sensitive fields
+				
 				if user.FirstName != tc.registerRequest.FirstName {
 					t.Errorf("Expected user first name %s, got %s", tc.registerRequest.FirstName, user.FirstName)
+				}
+
+				if user.LastName != tc.registerRequest.LastName { 
+					t.Errorf("Expected user last name %s, got %s", tc.registerRequest.LastName, user.LastName)
+				}
+
+				if user.Email != tc.registerRequest.Email {
+					t.Errorf("Expected user email %s, got %s", tc.registerRequest.Email, user.Email)
 				}
 			}
 		})
