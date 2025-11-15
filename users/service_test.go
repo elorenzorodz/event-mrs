@@ -14,14 +14,14 @@ import (
 
 type MockDBQueries struct {
 	*config.BaseMock
-	tTesting           *testing.T
+	testingType           *testing.T
 	CreateUserFunc     func(ctx context.Context, arg database.CreateUserParams) (database.User, error)
 	GetUserByEmailFunc func(ctx context.Context, email string) (database.User, error)
 }
 
 func (mockDBQueries *MockDBQueries) CreateUser(ctx context.Context, arg database.CreateUserParams) (database.User, error) {
 	if mockDBQueries.CreateUserFunc == nil {
-		mockDBQueries.tTesting.Fatalf("CreateUser was called, but no expectation (CreateUserFunc) was set.")
+		mockDBQueries.testingType.Fatalf("CreateUser was called, but no expectation (CreateUserFunc) was set.")
 	}
 
 	return mockDBQueries.CreateUserFunc(ctx, arg)
@@ -29,7 +29,7 @@ func (mockDBQueries *MockDBQueries) CreateUser(ctx context.Context, arg database
 
 func (mockDBQueries *MockDBQueries) GetUserByEmail(ctx context.Context, email string) (database.User, error) {
 	if mockDBQueries.GetUserByEmailFunc == nil {
-		mockDBQueries.tTesting.Fatalf("GetUserByEmail was called, but no expectation (GetUserByEmailFunc) was set.")
+		mockDBQueries.testingType.Fatalf("GetUserByEmail was called, but no expectation (GetUserByEmailFunc) was set.")
 	}
 
 	return mockDBQueries.GetUserByEmailFunc(ctx, email)
@@ -133,7 +133,7 @@ func TestRegister(tTesting *testing.T) {
 
 	for _, tc := range tests {
 		tTesting.Run(tc.name, func(t *testing.T) {
-			mockDB := &MockDBQueries{tTesting: t}
+			mockDB := &MockDBQueries{testingType: t}
 			mockTokenGen := &MockTokenGenerator{tTesting: t}
 			service := users.NewService(mockDB, mockTokenGen)
 
@@ -171,7 +171,7 @@ func TestRegister(tTesting *testing.T) {
 	}
 }
 
-func TestLogin(tTesting *testing.T) {
+func TestLogin(testingType *testing.T) {
 	ctx := context.Background()
 
 	testHashedPassword := "$2a$14$10WUQj2cgEhGkX9uF.aqnOGpX7sk4v5gbY2RaooNoLm90hzCRnWmC"
@@ -251,8 +251,8 @@ func TestLogin(tTesting *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tTesting.Run(tc.name, func(t *testing.T) {
-			mockDB := &MockDBQueries{tTesting: t}
+		testingType.Run(tc.name, func(t *testing.T) {
+			mockDB := &MockDBQueries{testingType: t}
 			mockTokenGen := &MockTokenGenerator{tTesting: t}
 			service := users.NewService(mockDB, mockTokenGen)
 
